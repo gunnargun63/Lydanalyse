@@ -1,0 +1,2733 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Akustik — lydanalyse og spektrum</title>
+
+<script>
+  (function() {
+    var saved = localStorage.getItem('akustik_theme');
+    if (saved === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
+
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --panel: #f5f4ef;
+  --row-alt: #fafaf7;
+  --panel-border: #e8e5dc;
+  --text: #2a2a2a;
+  --muted: #6b6b6b;
+  --data-col: #eaf3fb;
+  --data-col-border: #cfe1f2;
+  --calc-col: #f5f4ef;
+  --calc-col-border: #e8e5dc;
+  --const-col: #f4ecdb;
+  --const-col-border: #e6d8b5;
+  --blue: #378ADD;
+  --green: #1D9E75;
+  --brown: #993C1D;
+  --danger: #a04040;
+  --fit-bg: rgba(153,60,29,0.05);
+  --fit-border: rgba(153,60,29,0.20);
+  --chart-grid: #eeeeee;
+  --chart-text: #2a2a2a;
+  --shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+}
+
+[data-theme="dark"] {
+  --bg: #1a1a1e;
+  --surface: #222229;
+  --panel: #27272f;
+  --row-alt: #1e1e25;
+  --panel-border: #3d3d48;
+  --text: #e4e4ec;
+  --muted: #9494a8;
+  --data-col: #1c3048;
+  --data-col-border: #2d4d70;
+  --calc-col: #27272f;
+  --calc-col-border: #3d3d48;
+  --const-col: #2e2614;
+  --const-col-border: #5a4828;
+  --blue: #5ba3f0;
+  --green: #33c48a;
+  --brown: #e07850;
+  --danger: #e05050;
+  --fit-bg: rgba(220,100,60,0.12);
+  --fit-border: rgba(220,100,60,0.30);
+  --shadow: 0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.3);
+  --chart-grid: #333340;
+  --chart-text: #b8b8cc;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 20px;
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.header-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--text);
+  color: var(--bg);
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 1000;
+}
+
+.toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+h2 { font-size: 16px; font-weight: 600; margin: 0 0 8px; }
+h3 { font-size: 12px; font-weight: 600; text-transform: uppercase;
+     letter-spacing: 0.5px; color: var(--muted); margin: 0 0 8px; }
+
+.app-subtitle { color: var(--muted); font-weight: 400; }
+.subtitle { color: var(--muted); font-size: 13px; margin: 0; }
+
+.theme-btn {
+  flex-shrink: 0;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--muted);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+}
+.theme-btn:hover { color: var(--text); background: var(--panel); }
+.theme-btn svg { display: block; }
+.icon-sun  { display: none; }
+.icon-moon { display: block; }
+[data-theme="dark"] .icon-sun  { display: block; }
+[data-theme="dark"] .icon-moon { display: none; }
+
+button {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 7px 14px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+button:hover { background: #ecebe4; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+button.primary {
+  background: var(--blue);
+  color: white;
+  border-color: var(--blue);
+}
+button.primary:hover { background: #2c75c0; }
+
+button.danger { color: var(--danger); }
+
+button.small {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+[data-theme="dark"] button:hover         { background: #32323c; }
+[data-theme="dark"] button.primary:hover { background: #4a90d9; }
+
+select, input[type="text"], input[type="number"] {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 5px 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+[data-theme="dark"] select,
+[data-theme="dark"] input[type="text"],
+[data-theme="dark"] input[type="number"] {
+  color: var(--text);
+  background: var(--surface);
+}
+
+input[type="range"] {
+  vertical-align: middle;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+
+.panel-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.value-display {
+  font-family: 'Menlo', 'Monaco', monospace;
+  font-size: 13px;
+  color: var(--text);
+  min-width: 60px;
+  display: inline-block;
+}
+
+.graph-container {
+  background: var(--surface);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.graph-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--panel-border);
+  background: var(--panel);
+}
+
+.graph-info {
+  font-family: 'Menlo', 'Monaco', monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  background: var(--surface);
+  cursor: crosshair;
+}
+
+.tab-buttons {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.tab-btn {
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 0;
+}
+
+.tab-btn.active {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+}
+
+.tab-btn:hover { background: var(--panel); }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.status {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.status.active { background: var(--green); }
+.status.recording { background: var(--danger); animation: pulse 1s infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.help-text {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.gen-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.gen-box {
+  background: var(--surface);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+
+.gen-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.gen-title {
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gen-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.gen-body {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.gen-body label {
+  font-size: 12px;
+  min-width: 56px;
+}
+
+.gen-body input[type="range"] {
+  flex: 1;
+  min-width: 80px;
+}
+
+.gen-body button {
+  margin-left: auto;
+}
+
+.unit {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.small-select {
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+.error-banner {
+  background: rgba(160, 64, 64, 0.1);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 10px 14px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  display: none;
+}
+
+.error-banner.visible { display: block; }
+
+@media (max-width: 700px) {
+  .panel-row { flex-direction: column; align-items: stretch; }
+  .control-group { justify-content: space-between; }
+  .gen-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <div>
+    <h1>Akustik <span class="app-subtitle">— signal, spektrum og sweep</span></h1>
+    <p class="subtitle">Realtids lydanalyse med FFT. Inspireret af Datalyse.</p>
+  </div>
+  <div class="header-buttons">
+    <button onclick="copyGraph()" title="Kopiér den aktuelle graf til udklipsholderen">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>Kopiér graf</button>
+    <button onclick="saveProject()" title="Gem projektet som en fil">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+        <polyline points="17 21 17 13 7 13 7 21"/>
+        <polyline points="7 3 7 8 15 8"/>
+      </svg>Gem projekt</button>
+    <button onclick="document.getElementById('loadProjectInput').click()" title="Indlæs et tidligere gemt projekt">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px">
+        <path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>Indlæs</button>
+    <input type="file" id="loadProjectInput" accept=".json,application/json" style="display:none" onchange="loadProjectFile(event)">
+    <button class="theme-btn" onclick="toggleTheme()" title="Skift til mørk/lys tilstand" aria-label="Skift tema">
+      <span class="icon-moon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </span>
+      <span class="icon-sun">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/>
+          <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+      </span>
+    </button>
+  </div>
+</div>
+
+<!-- Toast til kort feedback -->
+<div id="toast" class="toast"></div>
+
+<div id="errorBanner" class="error-banner"></div>
+
+<!-- Hovedkontroller -->
+<div class="panel">
+  <div class="panel-row">
+    <div class="control-group">
+      <button id="micBtn" class="primary" onclick="toggleMic()">Start mikrofon</button>
+      <span><span id="micStatus" class="status"></span><span id="micLabel">Mikrofon ikke aktiv</span></span>
+    </div>
+    <div class="control-group" id="micDeviceGroup" style="display:none">
+      <label>Input</label>
+      <select id="micDeviceSel" onchange="onMicDeviceChange()" style="max-width:200px"></select>
+    </div>
+    <div class="control-group">
+      <label>Følsomhed</label>
+      <input type="range" id="micGain" min="0" max="100" value="50" step="1" oninput="onMicGainInput()" style="width:120px">
+      <span class="value-display" id="micGainVal">1,0×</span>
+    </div>
+    <div class="control-group">
+      <label>Maks. frekvens</label>
+      <input type="number" id="freqRangeCustom" min="50" max="48000" value="5000" step="100" style="width:90px" onchange="onCustomFreqChange()">
+      <span class="unit">Hz</span>
+      <button class="small" onclick="setMaxFreq(2000)">2 k</button>
+      <button class="small" onclick="setMaxFreq(5000)">5 k</button>
+      <button class="small" onclick="setMaxFreq(10000)">10 k</button>
+      <button class="small" onclick="setMaxFreq(20000)">20 k</button>
+    </div>
+    <div class="control-group">
+      <label>FFT-størrelse</label>
+      <select id="fftSizeSel" onchange="onFftSizeChange()">
+        <option value="1024">1024</option>
+        <option value="2048">2048</option>
+        <option value="4096">4096</option>
+        <option value="8192">8192</option>
+        <option value="16384" selected>16384</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- Tonegenerator -->
+<div class="panel">
+  <h3>Tonegenerator</h3>
+  <div class="gen-grid">
+    <!-- Generator 1 -->
+    <div class="gen-box">
+      <div class="gen-header">
+        <span class="gen-title"><span class="gen-dot" style="background:var(--blue)"></span>Generator 1</span>
+        <select id="genModeSel1" onchange="onGenModeChange(1)" class="small-select">
+          <option value="tone">Fast tone</option>
+          <option value="sweep_lin">Sweep, lineær</option>
+          <option value="sweep_log">Sweep, logaritmisk</option>
+        </select>
+      </div>
+      <div class="gen-body" id="toneFreqGroup1">
+        <label>Frekvens</label>
+        <input type="range" id="toneFreq1" min="20" max="5000" value="440" step="1" oninput="onToneFreqInput(1)">
+        <input type="number" id="toneFreqNum1" min="20" max="20000" value="440" step="1" oninput="onToneFreqNumInput(1)" style="width:75px">
+        <span class="unit">Hz</span>
+      </div>
+      <div class="gen-body" id="sweepGroup1" style="display:none">
+        <label>Fra</label>
+        <input type="number" id="sweepFrom1" value="100" min="20" max="20000" style="width:70px">
+        <label>til</label>
+        <input type="number" id="sweepTo1" value="3000" min="20" max="20000" style="width:70px">
+        <label>Hz over</label>
+        <input type="number" id="sweepDur1" value="10" min="1" max="120" style="width:50px">
+        <span class="unit">s</span>
+      </div>
+      <div class="gen-body">
+        <label>Lydstyrke</label>
+        <input type="range" id="genGain1" min="0" max="100" value="20" step="1" oninput="onGenGainInput(1)">
+        <span class="value-display" id="genGainVal1">20 %</span>
+        <button id="genBtn1" onclick="toggleGen(1)">Start</button>
+      </div>
+    </div>
+
+    <!-- Generator 2 -->
+    <div class="gen-box">
+      <div class="gen-header">
+        <span class="gen-title"><span class="gen-dot" style="background:var(--brown)"></span>Generator 2</span>
+        <select id="genModeSel2" onchange="onGenModeChange(2)" class="small-select">
+          <option value="tone">Fast tone</option>
+          <option value="sweep_lin">Sweep, lineær</option>
+          <option value="sweep_log">Sweep, logaritmisk</option>
+        </select>
+      </div>
+      <div class="gen-body" id="toneFreqGroup2">
+        <label>Frekvens</label>
+        <input type="range" id="toneFreq2" min="20" max="5000" value="444" step="1" oninput="onToneFreqInput(2)">
+        <input type="number" id="toneFreqNum2" min="20" max="20000" value="444" step="1" oninput="onToneFreqNumInput(2)" style="width:75px">
+        <span class="unit">Hz</span>
+      </div>
+      <div class="gen-body" id="sweepGroup2" style="display:none">
+        <label>Fra</label>
+        <input type="number" id="sweepFrom2" value="100" min="20" max="20000" style="width:70px">
+        <label>til</label>
+        <input type="number" id="sweepTo2" value="3000" min="20" max="20000" style="width:70px">
+        <label>Hz over</label>
+        <input type="number" id="sweepDur2" value="10" min="1" max="120" style="width:50px">
+        <span class="unit">s</span>
+      </div>
+      <div class="gen-body">
+        <label>Lydstyrke</label>
+        <input type="range" id="genGain2" min="0" max="100" value="20" step="1" oninput="onGenGainInput(2)">
+        <span class="value-display" id="genGainVal2">20 %</span>
+        <button id="genBtn2" onclick="toggleGen(2)">Start</button>
+      </div>
+    </div>
+  </div>
+  <div class="help-text">To toner samtidigt giver stødtoner (svævninger): amplituden moduleres med forskelsfrekvensen |f₁ − f₂|. Prøv fx 440 Hz og 444 Hz — du hører 4 stød per sekund.</div>
+</div>
+
+<!-- Faner -->
+<div class="tab-buttons">
+  <button class="tab-btn active" onclick="setTab('time')">Tidssignal</button>
+  <button class="tab-btn" onclick="setTab('fft')">Frekvensspektrum (FFT)</button>
+  <button class="tab-btn" onclick="setTab('sweep')">Sweep-måling</button>
+</div>
+
+<!-- Tidssignal -->
+<div id="tab-time" class="tab-content active">
+  <div class="graph-container">
+    <div class="graph-header">
+      <span><b>Signal som funktion af tiden</b></span>
+      <span class="graph-info" id="timeInfo">Y-skala: auto</span>
+    </div>
+    <canvas id="timeCanvas" height="280"
+            onclick="onTimeClick(event)"
+            onmousemove="onTimeHover(event)"
+            onmouseleave="onTimeLeave()"
+            onmousedown="onTimeDown(event)"
+            onmouseup="onTimeUp(event)"
+            onwheel="onTimeWheel(event)"
+            oncontextmenu="onTimeRightClick(event); return false;"></canvas>
+  </div>
+  <div class="panel">
+    <div class="panel-row">
+      <div class="control-group">
+        <label>Tidsvindue</label>
+        <select id="timeWindowSel" onchange="onTimeWindowChange()">
+          <option value="0.01">10 ms</option>
+          <option value="0.025">25 ms</option>
+          <option value="0.05" selected>50 ms</option>
+          <option value="0.1">100 ms</option>
+          <option value="0.2">200 ms</option>
+          <option value="0.5">500 ms</option>
+          <option value="1">1 s</option>
+          <option value="2">2 s</option>
+          <option value="5">5 s</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Y-skala</label>
+        <select id="yScaleSel" onchange="onYScaleChange()">
+          <option value="auto" selected>Automatisk</option>
+          <option value="0.1">±0,1</option>
+          <option value="0.25">±0,25</option>
+          <option value="0.5">±0,5</option>
+          <option value="1">±1,0</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <button onclick="zoomTime(0.5)" title="Zoom ind (hurtigtast: musehjul op)">Zoom ind</button>
+        <button onclick="zoomTime(2)" title="Zoom ud (hurtigtast: musehjul ned)">Zoom ud</button>
+        <button onclick="resetTimeZoom()">Nulstil zoom</button>
+      </div>
+      <div class="control-group">
+        <button onclick="clearTimeMarkers()">Ryd markører</button>
+      </div>
+    </div>
+    <div class="help-text">Klik for at sætte markør A, klik igen for markør B — ΔT og 1/ΔT vises. Højreklik for at fjerne nærmeste markør. Musehjul zoomer om muse-punktet. Shift+træk for at zoome ind på et område.</div>
+  </div>
+</div>
+
+<!-- FFT -->
+<div id="tab-fft" class="tab-content">
+  <div class="graph-container">
+    <div class="graph-header">
+      <span><b>Frekvensspektrum</b></span>
+      <span class="graph-info" id="fftInfo">Klik i grafen for at måle en frekvens</span>
+    </div>
+    <canvas id="fftCanvas" height="320"
+            onclick="onFftClick(event)"
+            onmousemove="onFftHover(event)"
+            onmouseleave="onFftLeave()"
+            onmousedown="onFftDown(event)"
+            onmouseup="onFftUp(event)"
+            onwheel="onFftWheel(event)"></canvas>
+  </div>
+  <div class="panel">
+    <div class="panel-row">
+      <div class="control-group">
+        <label>X-akse</label>
+        <select id="fftAxisSel" onchange="onFftAxisChange()">
+          <option value="lin" selected>Lineær</option>
+          <option value="log">Logaritmisk</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Y-akse</label>
+        <select id="fftScaleSel" onchange="onFftScaleChange()">
+          <option value="linear" selected>Lineær</option>
+          <option value="db">Decibel (dB)</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Udjævning</label>
+        <input type="range" id="fftSmooth" min="0" max="95" value="50" step="5" oninput="onFftSmoothInput()">
+        <span class="value-display" id="fftSmoothVal">0,50</span>
+      </div>
+    </div>
+    <div class="panel-row">
+      <div class="control-group">
+        <label>Top-detektion</label>
+        <input type="checkbox" id="fftPeakChk" onchange="onFftPeakChange()">
+        <label for="fftPeakCountSel">antal</label>
+        <select id="fftPeakCountSel" onchange="onFftPeakCountChange()">
+          <option value="3">3</option>
+          <option value="5">5</option>
+          <option value="8" selected>8</option>
+          <option value="12">12</option>
+          <option value="20">20</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <button onclick="zoomFft(0.5)">Zoom ind</button>
+        <button onclick="zoomFft(2)">Zoom ud</button>
+        <button onclick="resetFftZoom()">Nulstil zoom</button>
+      </div>
+      <div class="control-group">
+        <button onclick="clearFftMarker()">Ryd markør</button>
+      </div>
+    </div>
+    <div class="help-text">Klik for at sætte markør. Shift+træk for at zoome ind på et område. Musehjul zoomer om muse-punktet. Top-detektion finder de stærkeste toppe automatisk.</div>
+  </div>
+</div>
+
+<!-- Sweep -->
+<div id="tab-sweep" class="tab-content">
+  <div class="graph-container">
+    <div class="graph-header">
+      <span><b>Sweep-respons</b></span>
+      <span class="graph-info" id="sweepInfo">Klik for at måle en frekvens</span>
+    </div>
+    <canvas id="sweepCanvas" height="320" onclick="onSweepClick(event)" onmousemove="onSweepHover(event)" onmouseleave="onSweepLeave()"></canvas>
+  </div>
+  <div class="panel">
+    <div class="panel-row">
+      <div class="control-group">
+        <button id="sweepRecordBtn" class="primary" onclick="toggleSweepRecord()">Start måling</button>
+        <span><span id="sweepRecStatus" class="status"></span><span id="sweepRecLabel">Ikke aktiv</span></span>
+      </div>
+      <div class="control-group">
+        <label>Tilstand</label>
+        <select id="sweepModeSel" onchange="onSweepModeChange()">
+          <option value="peak" selected>Akkumulér maksimum</option>
+          <option value="current">Vis aktuelt spektrum</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <button onclick="clearSweep()">Nulstil opsamling</button>
+        <button onclick="clearSweepMarker()">Ryd markør</button>
+      </div>
+    </div>
+    <div class="help-text">Tryk "Start måling" lige før du starter sweepet — så slås FFT-udjævning fra og toppe fanges præcist. Tryk "Stop" når sweepet er færdigt.</div>
+  </div>
+</div>
+
+<script>
+// ===== Tilstand =====
+let audioCtx = null;
+let micStream = null;
+let micSource = null;
+let micGainNode = null;
+let analyser = null;
+let micDeviceId = null;  // null = default
+let timeData = null;
+let freqData = null;
+let freqDataDb = null;
+
+let fftSize = 16384;
+let maxFreq = 5000;
+let timeWindow = 0.05;
+let yScale = 'auto';
+let fftScale = 'linear';
+let fftSmoothing = 0.5;
+let sweepMode = 'peak';
+let sweepRecording = false;
+let prevSmoothing = null;
+
+let peakSpectrum = null;
+let currentSpectrum = null;
+// Når data indlæses fra et projekt, gemmer vi den oprindelige sampleRate her
+// så tegningen kan bruge den korrekte bin-bredde (uafhængigt af om audioCtx
+// har en anden sampleRate end den projektet blev gemt med).
+let loadedSampleRate = null;
+
+// Historik-buffer for tidssignal (uafhængig af FFT-størrelse).
+// Vi gemmer altid de seneste HISTORY_SECONDS sekunders samples i en ringbuffer.
+const HISTORY_SECONDS = 10;
+let history = null;        // Float32Array, ringbuffer
+let historyWritePos = 0;   // næste skrive-index (mod historyLen)
+let historyLen = 0;
+
+let fftMarkerHz = null;
+let fftHoverHz = null;
+let sweepMarkerHz = null;
+let sweepHoverHz = null;
+
+// FFT-graf: zoom, akse-type, top-detektion
+let fftAxisType = 'lin';       // 'lin' eller 'log'
+let fftZoomMin = null;          // Hz, null = brug 0
+let fftZoomMax = null;          // Hz, null = brug maxFreq
+let fftDragStart = null;        // Hz, for shift+træk-zoom
+let fftPeakDetect = false;      // top-detektion til/fra
+let fftPeakCount = 8;
+
+let activeTab = 'time';
+let rafId = null;
+
+// Tidsgraf: markører og zoom
+let timeMarker1 = null;  // ms fra start af vinduet
+let timeMarker2 = null;
+let timeHover = null;
+let timeZoomStart = 0;   // i sekunder, offset fra slutningen af buffer
+let timeZoomSpan = null; // i sekunder, null = brug timeWindow
+let timeDragStart = null; // for shift+træk-zoom
+
+// ===== Initialisering =====
+window.addEventListener('load', () => {
+  resizeCanvases();
+  window.addEventListener('resize', () => { resizeCanvases(); draw(); });
+  draw();
+});
+
+function resizeCanvases() {
+  ['timeCanvas', 'fftCanvas', 'sweepCanvas'].forEach(id => {
+    resizeOneCanvas(id);
+  });
+}
+
+function resizeOneCanvas(id) {
+  const c = document.getElementById(id);
+  if (!c) return;
+  // Brug oprindelig logisk højde - gemmes første gang
+  if (!c.dataset.cssHeight) {
+    c.dataset.cssHeight = c.getAttribute('height') || '280';
+  }
+  // Hvis canvasset er skjult (clientWidth = 0), gør vi det midlertidigt synligt
+  // for at læse den korrekte bredde fra layout.
+  const tab = c.closest('.tab-content');
+  const wasHidden = tab && !tab.classList.contains('active');
+  let savedDisplay = '';
+  if (wasHidden) {
+    savedDisplay = tab.style.display;
+    tab.style.visibility = 'hidden';
+    tab.style.display = 'block';
+  }
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = c.clientWidth;
+  const cssHeight = parseInt(c.dataset.cssHeight, 10);
+  c.width = Math.floor(cssWidth * dpr);
+  c.height = Math.floor(cssHeight * dpr);
+  c.style.height = cssHeight + 'px';
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (wasHidden) {
+    tab.style.display = savedDisplay;
+    tab.style.visibility = '';
+  }
+}
+
+// ===== Tema =====
+function toggleTheme() {
+  const html = document.documentElement;
+  const goingDark = html.getAttribute('data-theme') !== 'dark';
+  html.setAttribute('data-theme', goingDark ? 'dark' : 'light');
+  localStorage.setItem('akustik_theme', goingDark ? 'dark' : 'light');
+  draw();
+}
+
+function themeColor(varName, fallback) {
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || fallback;
+}
+
+// ===== Fejlhåndtering =====
+function showError(msg) {
+  const b = document.getElementById('errorBanner');
+  b.textContent = msg;
+  b.classList.add('visible');
+}
+function clearError() {
+  document.getElementById('errorBanner').classList.remove('visible');
+}
+
+// ===== Toast =====
+let toastTimer = null;
+function showToast(msg, duration) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('visible');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('visible'), duration || 2200);
+}
+
+// ===== Kopiér graf til udklipsholderen =====
+async function copyGraph() {
+  const canvasIds = { time: 'timeCanvas', fft: 'fftCanvas', sweep: 'sweepCanvas' };
+  const c = document.getElementById(canvasIds[activeTab]);
+  if (!c) return;
+  // Tegn på en midlertidig canvas med rigtig baggrundsfarve (canvas alpha kan
+  // give gennemsigtighed når man indsætter i andre programmer)
+  const dpr = window.devicePixelRatio || 1;
+  const tmp = document.createElement('canvas');
+  tmp.width = c.width;
+  tmp.height = c.height;
+  const tctx = tmp.getContext('2d');
+  // Hvid baggrund (eller mørk hvis det er mørkt tema)
+  tctx.fillStyle = themeColor('--surface', '#ffffff');
+  tctx.fillRect(0, 0, tmp.width, tmp.height);
+  tctx.drawImage(c, 0, 0);
+  // Forsøg moderne clipboard API
+  try {
+    const blob = await new Promise(res => tmp.toBlob(res, 'image/png'));
+    if (!blob) throw new Error('toBlob fejlede');
+    if (navigator.clipboard && window.ClipboardItem) {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      showToast('Graf kopieret til udklipsholderen');
+      return;
+    }
+    throw new Error('Clipboard API ikke understøttet');
+  } catch (e) {
+    // Fallback: download som PNG
+    const a = document.createElement('a');
+    a.download = 'akustik-' + activeTab + '-' + Date.now() + '.png';
+    a.href = tmp.toDataURL('image/png');
+    a.click();
+    showToast('Graf gemt som PNG (kopiering ikke mulig i denne browser)');
+  }
+}
+
+// ===== Gem og indlæs projekt =====
+function saveProject() {
+  // Saml relevant tilstand. Float32Array konverteres til array for JSON.
+  const state = {
+    version: 1,
+    timestamp: Date.now(),
+    sampleRate: audioCtx ? audioCtx.sampleRate : null,
+    settings: {
+      fftSize, maxFreq, fftScale, fftSmoothing, fftAxisType,
+      fftZoomMin, fftZoomMax, fftPeakDetect, fftPeakCount,
+      timeWindow, yScale, sweepMode,
+      timeZoomStart, timeZoomSpan,
+      activeTab
+    },
+    markers: {
+      timeMarker1, timeMarker2,
+      fftMarkerHz, sweepMarkerHz
+    },
+    generators: {
+      g1: { mode: gens[1].mode,
+            freq: parseFloat(document.getElementById('toneFreqNum1').value),
+            sweepFrom: parseFloat(document.getElementById('sweepFrom1').value),
+            sweepTo: parseFloat(document.getElementById('sweepTo1').value),
+            sweepDur: parseFloat(document.getElementById('sweepDur1').value),
+            gain: parseInt(document.getElementById('genGain1').value, 10) },
+      g2: { mode: gens[2].mode,
+            freq: parseFloat(document.getElementById('toneFreqNum2').value),
+            sweepFrom: parseFloat(document.getElementById('sweepFrom2').value),
+            sweepTo: parseFloat(document.getElementById('sweepTo2').value),
+            sweepDur: parseFloat(document.getElementById('sweepDur2').value),
+            gain: parseInt(document.getElementById('genGain2').value, 10) }
+    },
+    data: {
+      // Det aktuelle FFT-spektrum (lineær amplitude)
+      freqData: freqData ? Array.from(freqData) : null,
+      // Sweep-akkumulator (kan være tomt)
+      peakSpectrum: peakSpectrum ? Array.from(peakSpectrum) : null,
+      // En kopi af tidssignal-historikken (komprimeret til maks. 5 sek for at
+      // holde filstørrelse rimelig)
+      history: history ? sampleHistoryForSave() : null
+    }
+  };
+  const json = JSON.stringify(state);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const datestr = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+  a.download = 'akustik-projekt-' + datestr + '.json';
+  a.href = url;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Projekt gemt');
+}
+
+function sampleHistoryForSave() {
+  // Gem op til 5 sekunder af de seneste samples (for at holde filstørrelse nede)
+  if (!history || !audioCtx) return null;
+  const maxSec = 5;
+  const nKeep = Math.min(historyLen, Math.ceil(maxSec * audioCtx.sampleRate));
+  return Array.from(readHistoryTail(nKeep));
+}
+
+function loadProjectFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const state = JSON.parse(e.target.result);
+      applyProjectState(state);
+      showToast('Projekt indlæst: ' + file.name);
+    } catch (err) {
+      showError('Kunne ikke indlæse projektet: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  // Nulstil input så samme fil kan vælges igen senere
+  event.target.value = '';
+}
+
+function applyProjectState(state) {
+  if (!state || !state.settings) {
+    throw new Error('Ugyldig projektfil');
+  }
+  const s = state.settings;
+  // FFT-størrelse
+  if (s.fftSize) {
+    fftSize = s.fftSize;
+    document.getElementById('fftSizeSel').value = String(s.fftSize);
+    if (analyser) {
+      analyser.fftSize = fftSize;
+      timeData = new Float32Array(analyser.fftSize);
+      freqData = new Float32Array(analyser.frequencyBinCount);
+      freqDataDb = new Float32Array(analyser.frequencyBinCount);
+    }
+  }
+  // Frekvensområde
+  if (s.maxFreq) {
+    maxFreq = s.maxFreq;
+    document.getElementById('freqRangeCustom').value = String(s.maxFreq);
+  }
+  // FFT-indstillinger
+  if (s.fftScale) {
+    fftScale = s.fftScale;
+    document.getElementById('fftScaleSel').value = s.fftScale;
+  }
+  if (typeof s.fftSmoothing === 'number') {
+    fftSmoothing = s.fftSmoothing;
+    document.getElementById('fftSmooth').value = String(Math.round(s.fftSmoothing * 100));
+    document.getElementById('fftSmoothVal').textContent = s.fftSmoothing.toFixed(2).replace('.', ',');
+    if (analyser) analyser.smoothingTimeConstant = s.fftSmoothing;
+  }
+  if (s.fftAxisType) {
+    fftAxisType = s.fftAxisType;
+    document.getElementById('fftAxisSel').value = s.fftAxisType;
+  }
+  fftZoomMin = s.fftZoomMin;
+  fftZoomMax = s.fftZoomMax;
+  fftPeakDetect = !!s.fftPeakDetect;
+  document.getElementById('fftPeakChk').checked = fftPeakDetect;
+  if (s.fftPeakCount) {
+    fftPeakCount = s.fftPeakCount;
+    document.getElementById('fftPeakCountSel').value = String(s.fftPeakCount);
+  }
+  // Tidssignal-indstillinger
+  if (typeof s.timeWindow === 'number') {
+    timeWindow = s.timeWindow;
+    document.getElementById('timeWindowSel').value = String(s.timeWindow);
+  }
+  if (s.yScale) {
+    yScale = s.yScale;
+    document.getElementById('yScaleSel').value = s.yScale;
+  }
+  if (s.sweepMode) {
+    sweepMode = s.sweepMode;
+    document.getElementById('sweepModeSel').value = s.sweepMode;
+  }
+  timeZoomStart = s.timeZoomStart || 0;
+  timeZoomSpan = s.timeZoomSpan;
+  // Markører
+  if (state.markers) {
+    timeMarker1 = state.markers.timeMarker1;
+    timeMarker2 = state.markers.timeMarker2;
+    fftMarkerHz = state.markers.fftMarkerHz;
+    sweepMarkerHz = state.markers.sweepMarkerHz;
+  }
+  // Generatorer (kun indstillinger - vi starter dem ikke automatisk)
+  if (state.generators) {
+    for (const id of [1, 2]) {
+      const g = state.generators['g' + id];
+      if (!g) continue;
+      gens[id].mode = g.mode || 'tone';
+      document.getElementById('genModeSel' + id).value = gens[id].mode;
+      document.getElementById('toneFreq' + id).value = String(g.freq);
+      document.getElementById('toneFreqNum' + id).value = String(g.freq);
+      document.getElementById('sweepFrom' + id).value = String(g.sweepFrom);
+      document.getElementById('sweepTo' + id).value = String(g.sweepTo);
+      document.getElementById('sweepDur' + id).value = String(g.sweepDur);
+      document.getElementById('genGain' + id).value = String(g.gain);
+      document.getElementById('genGainVal' + id).textContent = g.gain + ' %';
+      // Opdatér visning af tone/sweep felter
+      document.getElementById('toneFreqGroup' + id).style.display =
+        gens[id].mode === 'tone' ? 'flex' : 'none';
+      document.getElementById('sweepGroup' + id).style.display =
+        gens[id].mode === 'tone' ? 'none' : 'flex';
+    }
+  }
+  // Gendan data hvis tilgængeligt - kun hvis mikrofonen IKKE kører
+  // (ellers vil live-data overskrive det med det samme)
+  if (state.data && !analyser) {
+    // Husk projektets sampleRate så vi kan tegne korrekt selv hvis
+    // browserens audioCtx har en anden sampleRate (eller slet ikke eksisterer)
+    loadedSampleRate = state.sampleRate || null;
+    if (state.data.freqData) {
+      freqData = new Float32Array(state.data.freqData);
+      // Generér også dB-version
+      freqDataDb = new Float32Array(freqData.length);
+      for (let i = 0; i < freqData.length; i++) {
+        freqDataDb[i] = 20 * Math.log10(Math.max(freqData[i], 1e-10));
+      }
+    }
+    if (state.data.peakSpectrum) {
+      peakSpectrum = new Float32Array(state.data.peakSpectrum);
+    }
+    if (state.data.history && state.sampleRate) {
+      const loaded = state.data.history;
+      historyLen = loaded.length;
+      history = new Float32Array(loaded);
+      historyWritePos = 0;
+    }
+    // Opret stub audioCtx hvis nødvendigt - så drawTime kan tegne
+    // (den tjekker for !audioCtx for at undgå at tegne tomt)
+    if (!audioCtx) {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (e) {
+        showError('Kunne ikke oprette lydkontekst til at vise data: ' + e.message);
+      }
+    }
+  } else if (state.data && analyser) {
+    // Mikrofonen kører — informér brugeren
+    showToast('Indstillinger og generatorer indlæst. Stop mikrofonen for at se gemte data.', 3500);
+  }
+  // Skift til den fane projektet var på
+  if (s.activeTab) setTab(s.activeTab);
+  else draw();
+}
+
+// ===== Mikrofon =====
+async function toggleMic() {
+  if (micStream) {
+    stopMic();
+  } else {
+    await startMic();
+  }
+}
+
+async function startMic() {
+  clearError();
+  try {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+      await audioCtx.resume();
+    }
+    const audioConstraints = {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false
+    };
+    if (micDeviceId) {
+      audioConstraints.deviceId = { exact: micDeviceId };
+    }
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+    micSource = audioCtx.createMediaStreamSource(micStream);
+    // Gain-node til at justere "følsomhed" digitalt
+    micGainNode = audioCtx.createGain();
+    micGainNode.gain.value = getCurrentMicGain();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = fftSize;
+    analyser.smoothingTimeConstant = fftSmoothing;
+    micSource.connect(micGainNode);
+    micGainNode.connect(analyser);
+
+    // Mikrofonen kører nu - eventuelle indlæste data overskrives og
+    // loadedSampleRate er ikke længere relevant
+    loadedSampleRate = null;
+
+    timeData = new Float32Array(analyser.fftSize);
+    freqData = new Float32Array(analyser.frequencyBinCount);
+    freqDataDb = new Float32Array(analyser.frequencyBinCount);
+
+    // Historik: ringbuffer på HISTORY_SECONDS sekunder
+    historyLen = Math.ceil(HISTORY_SECONDS * audioCtx.sampleRate);
+    history = new Float32Array(historyLen);
+    historyWritePos = 0;
+
+    document.getElementById('micBtn').textContent = 'Stop mikrofon';
+    document.getElementById('micBtn').classList.remove('primary');
+    document.getElementById('micStatus').className = 'status recording';
+    // Find selve enhedsnavnet hvis muligt
+    const track = micStream.getAudioTracks()[0];
+    const deviceName = track ? track.label : '';
+    document.getElementById('micLabel').textContent =
+      Math.round(audioCtx.sampleRate) + ' Hz' +
+      (deviceName ? ' — ' + deviceName : '');
+
+    // Opdatér device-liste (kun muligt efter første permission)
+    refreshMicDeviceList();
+
+    startRenderLoop();
+  } catch (e) {
+    showError('Kunne ikke starte mikrofon: ' + e.message +
+      '. Tjek browser-tilladelser. (Bemærk at appen skal køre fra et fil/https — ikke fra en data: URL.)');
+  }
+}
+
+function getCurrentMicGain() {
+  // 0..100 slider → 0,1× til 10× (eksponentiel skala så midten er 1×)
+  const sliderVal = parseInt(document.getElementById('micGain').value, 10);
+  // 0 → 0,1, 50 → 1,0, 100 → 10
+  return Math.pow(10, (sliderVal - 50) / 50);
+}
+
+function onMicGainInput() {
+  const gain = getCurrentMicGain();
+  document.getElementById('micGainVal').textContent =
+    gain >= 1 ? gain.toFixed(1).replace('.', ',') + '×'
+              : gain.toFixed(2).replace('.', ',') + '×';
+  if (micGainNode) {
+    micGainNode.gain.setValueAtTime(gain, audioCtx.currentTime);
+  }
+}
+
+async function refreshMicDeviceList() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const mics = devices.filter(d => d.kind === 'audioinput');
+    if (mics.length <= 1) {
+      document.getElementById('micDeviceGroup').style.display = 'none';
+      return;
+    }
+    const sel = document.getElementById('micDeviceSel');
+    sel.innerHTML = '';
+    // "Default" option
+    const def = document.createElement('option');
+    def.value = '';
+    def.textContent = 'Standard';
+    sel.appendChild(def);
+    for (const d of mics) {
+      const opt = document.createElement('option');
+      opt.value = d.deviceId;
+      // Mikrofon-navnet er ofte længere end vi vil vise
+      opt.textContent = d.label || ('Mikrofon ' + d.deviceId.slice(0, 6));
+      if (d.deviceId === micDeviceId) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    document.getElementById('micDeviceGroup').style.display = 'flex';
+  } catch (e) {
+    // enumerateDevices kan fejle - ikke kritisk
+  }
+}
+
+async function onMicDeviceChange() {
+  const newId = document.getElementById('micDeviceSel').value || null;
+  if (newId === micDeviceId) return;
+  micDeviceId = newId;
+  // Genstart mikrofonen hvis den kører
+  if (micStream) {
+    stopMic();
+    await startMic();
+  }
+}
+
+function stopMic() {
+  if (sweepRecording) stopSweepRecord();
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+  if (micStream) {
+    micStream.getTracks().forEach(t => t.stop());
+    micStream = null;
+  }
+  if (micSource) { micSource.disconnect(); micSource = null; }
+  if (micGainNode) { micGainNode.disconnect(); micGainNode = null; }
+  analyser = null;
+  document.getElementById('micBtn').textContent = 'Start mikrofon';
+  document.getElementById('micBtn').classList.add('primary');
+  document.getElementById('micStatus').className = 'status';
+  document.getElementById('micLabel').textContent = 'Mikrofon ikke aktiv';
+}
+
+// ===== Tonegenerator (to uafhængige) =====
+// Hver generator har sin egen state - indexeret 1 og 2
+const gens = {
+  1: { osc: null, gain: null, isOn: false, mode: 'tone',
+       sweepStart: 0, sweepF0: 0, sweepF1: 0, sweepDur: 0, sweepType: 'lin' },
+  2: { osc: null, gain: null, isOn: false, mode: 'tone',
+       sweepStart: 0, sweepF0: 0, sweepF1: 0, sweepDur: 0, sweepType: 'lin' }
+};
+
+async function ensureAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    await audioCtx.resume();
+  }
+}
+
+async function toggleGen(id) {
+  if (gens[id].isOn) stopGen(id);
+  else await startGen(id);
+}
+
+async function startGen(id) {
+  try {
+    await ensureAudioCtx();
+    const g = gens[id];
+    const gainPct = parseInt(document.getElementById('genGain' + id).value, 10);
+    const gainVal = gainPct / 100 * 0.3;
+    g.osc = audioCtx.createOscillator();
+    g.osc.type = 'sine';
+    g.gain = audioCtx.createGain();
+    g.gain.gain.value = gainVal;
+    g.osc.connect(g.gain);
+    g.gain.connect(audioCtx.destination);
+
+    if (g.mode === 'tone') {
+      g.osc.frequency.value = parseFloat(document.getElementById('toneFreq' + id).value);
+      g.osc.start();
+    } else {
+      const f0 = parseFloat(document.getElementById('sweepFrom' + id).value);
+      const f1 = parseFloat(document.getElementById('sweepTo' + id).value);
+      const dur = parseFloat(document.getElementById('sweepDur' + id).value);
+      const now = audioCtx.currentTime;
+      // Gem til progress-visning
+      g.sweepStart = now;
+      g.sweepF0 = f0;
+      g.sweepF1 = f1;
+      g.sweepDur = dur;
+      g.sweepType = g.mode === 'sweep_lin' ? 'lin' : 'log';
+      g.osc.frequency.setValueAtTime(f0, now);
+      if (g.mode === 'sweep_lin') {
+        g.osc.frequency.linearRampToValueAtTime(f1, now + dur);
+      } else {
+        g.osc.frequency.exponentialRampToValueAtTime(Math.max(f1, 0.0001), now + dur);
+      }
+      g.osc.start();
+      setTimeout(() => { if (g.isOn) stopGen(id); }, dur * 1000 + 50);
+      setTab('sweep');
+    }
+
+    g.isOn = true;
+    const btn = document.getElementById('genBtn' + id);
+    btn.textContent = 'Stop';
+    btn.classList.add('danger');
+  } catch (e) {
+    showError('Kunne ikke starte generator ' + id + ': ' + e.message);
+  }
+}
+
+function stopGen(id) {
+  const g = gens[id];
+  if (g.osc) { try { g.osc.stop(); } catch (e) {} g.osc.disconnect(); g.osc = null; }
+  if (g.gain) { g.gain.disconnect(); g.gain = null; }
+  g.isOn = false;
+  const btn = document.getElementById('genBtn' + id);
+  btn.textContent = 'Start';
+  btn.classList.remove('danger');
+}
+
+function onGenModeChange(id) {
+  const g = gens[id];
+  g.mode = document.getElementById('genModeSel' + id).value;
+  document.getElementById('toneFreqGroup' + id).style.display =
+    g.mode === 'tone' ? 'flex' : 'none';
+  document.getElementById('sweepGroup' + id).style.display =
+    g.mode === 'tone' ? 'none' : 'flex';
+  if (g.isOn) stopGen(id);
+}
+
+function onToneFreqInput(id) {
+  const v = parseFloat(document.getElementById('toneFreq' + id).value);
+  document.getElementById('toneFreqNum' + id).value = v;
+  const g = gens[id];
+  if (g.isOn && g.osc && g.mode === 'tone') {
+    g.osc.frequency.setValueAtTime(v, audioCtx.currentTime);
+  }
+}
+
+function onToneFreqNumInput(id) {
+  const numEl = document.getElementById('toneFreqNum' + id);
+  let v = parseFloat(numEl.value);
+  if (isNaN(v)) return;
+  v = Math.max(20, Math.min(20000, v));
+  // Opdatér slider (clampet til dens range)
+  const sliderEl = document.getElementById('toneFreq' + id);
+  const sMax = parseFloat(sliderEl.max);
+  const sMin = parseFloat(sliderEl.min);
+  sliderEl.value = Math.max(sMin, Math.min(sMax, v));
+  const g = gens[id];
+  if (g.isOn && g.osc && g.mode === 'tone') {
+    g.osc.frequency.setValueAtTime(v, audioCtx.currentTime);
+  }
+}
+
+function onGenGainInput(id) {
+  const v = parseInt(document.getElementById('genGain' + id).value, 10);
+  document.getElementById('genGainVal' + id).textContent = v + ' %';
+  const g = gens[id];
+  if (g.gain) g.gain.gain.setValueAtTime(v / 100 * 0.3, audioCtx.currentTime);
+}
+
+// ===== Kontrolhåndtering =====
+function setMaxFreq(hz) {
+  document.getElementById('freqRangeCustom').value = String(hz);
+  onCustomFreqChange();
+}
+
+function onCustomFreqChange() {
+  let v = parseInt(document.getElementById('freqRangeCustom').value, 10);
+  if (isNaN(v) || v < 50) return;
+  // Begræns til Nyquist hvis vi har en audioCtx
+  if (audioCtx) v = Math.min(v, audioCtx.sampleRate / 2);
+  maxFreq = v;
+  fftZoomMin = null;
+  fftZoomMax = null;
+  clearSweep();
+  draw();
+}
+
+// Bevares for kompatibilitet med projekt-indlæsning af gamle filer
+function onFreqRangeChange() {
+  onCustomFreqChange();
+}
+
+function onFftSizeChange() {
+  fftSize = parseInt(document.getElementById('fftSizeSel').value, 10);
+  if (analyser) {
+    analyser.fftSize = fftSize;
+    timeData = new Float32Array(analyser.fftSize);
+    freqData = new Float32Array(analyser.frequencyBinCount);
+    freqDataDb = new Float32Array(analyser.frequencyBinCount);
+  }
+  clearSweep();
+}
+
+function onTimeWindowChange() {
+  timeWindow = parseFloat(document.getElementById('timeWindowSel').value);
+  resetTimeZoom();
+  clearTimeMarkers();
+}
+
+function onYScaleChange() {
+  yScale = document.getElementById('yScaleSel').value;
+}
+
+function onFftScaleChange() {
+  fftScale = document.getElementById('fftScaleSel').value;
+}
+
+function onFftSmoothInput() {
+  const v = parseInt(document.getElementById('fftSmooth').value, 10) / 100;
+  fftSmoothing = v;
+  document.getElementById('fftSmoothVal').textContent = v.toFixed(2).replace('.', ',');
+  // Mens vi måler sweep, skal vi ikke overskrive den frakoblede smoothing.
+  // Den værdi brugeren vælger gemmes til efter målingen.
+  if (sweepRecording) prevSmoothing = v;
+  else if (analyser) analyser.smoothingTimeConstant = v;
+}
+
+function onSweepModeChange() {
+  sweepMode = document.getElementById('sweepModeSel').value;
+}
+
+function clearSweep() {
+  peakSpectrum = null;
+  currentSpectrum = null;
+}
+
+function clearFftMarker() { fftMarkerHz = null; draw(); }
+function clearSweepMarker() { sweepMarkerHz = null; draw(); }
+
+function setTab(name) {
+  activeTab = name;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  const map = { time: 0, fft: 1, sweep: 2 };
+  const idx = map[name];
+  document.querySelectorAll('.tab-btn')[idx].classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+  // Resize det nu-synlige canvas (det kunne være sat op mens det var skjult)
+  const canvasIds = { time: 'timeCanvas', fft: 'fftCanvas', sweep: 'sweepCanvas' };
+  resizeOneCanvas(canvasIds[name]);
+  draw();
+}
+
+// ===== Render loop =====
+let lastHistoryUpdateTime = 0;
+
+function startRenderLoop() {
+  lastHistoryUpdateTime = audioCtx.currentTime;
+  function loop() {
+    if (analyser) {
+      analyser.getFloatTimeDomainData(timeData);
+      analyser.getFloatFrequencyData(freqDataDb);
+      // Konvertér til lineær
+      for (let i = 0; i < freqDataDb.length; i++) {
+        freqData[i] = Math.pow(10, freqDataDb[i] / 20);
+      }
+      updateHistory();
+      updateSpectrum();
+    }
+    draw();
+    rafId = requestAnimationFrame(loop);
+  }
+  rafId = requestAnimationFrame(loop);
+}
+
+// Append nye samples fra timeData til ringbuffer-historikken.
+// AnalyserNode giver altid de seneste fftSize samples ved hvert opslag;
+// vi kopierer kun den del der er kommet til siden sidst.
+function updateHistory() {
+  if (!history || !audioCtx) return;
+  const now = audioCtx.currentTime;
+  const dt = now - lastHistoryUpdateTime;
+  lastHistoryUpdateTime = now;
+  let nNew = Math.round(dt * audioCtx.sampleRate);
+  if (nNew <= 0) return;
+  // Begræns til hvad analyseren faktisk leverer
+  nNew = Math.min(nNew, timeData.length);
+  // De nyeste samples står sidst i timeData
+  const startSrc = timeData.length - nNew;
+  for (let i = 0; i < nNew; i++) {
+    history[historyWritePos] = timeData[startSrc + i];
+    historyWritePos = (historyWritePos + 1) % historyLen;
+  }
+}
+
+// Kopiér de seneste `nSamples` samples fra historik til en lineær buffer
+// (i kronologisk rækkefølge: ældste først).
+function readHistoryTail(nSamples) {
+  if (!history) return null;
+  nSamples = Math.min(nSamples, historyLen);
+  const out = new Float32Array(nSamples);
+  // Sidste skrevne sample er på (historyWritePos - 1)
+  // De seneste nSamples ender ved (historyWritePos - 1) og starter ved
+  // (historyWritePos - nSamples) mod historyLen.
+  let readPos = (historyWritePos - nSamples + historyLen) % historyLen;
+  for (let i = 0; i < nSamples; i++) {
+    out[i] = history[readPos];
+    readPos = (readPos + 1) % historyLen;
+  }
+  return out;
+}
+
+function updateSpectrum() {
+  if (!freqData) return;
+  currentSpectrum = freqData;
+  // Akkumulér kun maks når brugeren aktivt måler et sweep.
+  // Det forhindrer at gammel støj samles op før brugeren har trykket "Start"
+  // og giver et tydeligt klart "før / under / efter måling"-mønster.
+  if (sweepMode === 'peak' && sweepRecording) {
+    if (!peakSpectrum || peakSpectrum.length !== freqData.length) {
+      peakSpectrum = new Float32Array(freqData.length);
+    }
+    for (let i = 0; i < freqData.length; i++) {
+      if (freqData[i] > peakSpectrum[i]) peakSpectrum[i] = freqData[i];
+    }
+  }
+}
+
+// Returnerer den aktuelle sweep-frekvens for en kørende generator, eller null
+function getCurrentSweepHz(id) {
+  const g = gens[id];
+  if (!g.isOn || g.mode === 'tone' || !audioCtx) return null;
+  const t = audioCtx.currentTime - g.sweepStart;
+  if (t < 0 || t > g.sweepDur) return null;
+  const frac = t / g.sweepDur;
+  if (g.sweepType === 'lin') {
+    return g.sweepF0 + frac * (g.sweepF1 - g.sweepF0);
+  } else {
+    // Exponentiel: f(t) = f0 * (f1/f0)^(t/dur)
+    return g.sweepF0 * Math.pow(g.sweepF1 / g.sweepF0, frac);
+  }
+}
+
+// ===== Sweep-måling start/stop =====
+function toggleSweepRecord() {
+  if (sweepRecording) stopSweepRecord();
+  else startSweepRecord();
+}
+
+function startSweepRecord() {
+  if (!analyser) {
+    showError('Start mikrofonen først.');
+    return;
+  }
+  // Nulstil opsamling så vi starter rent
+  peakSpectrum = null;
+  // Slå smoothing fra - kritisk for at fange korte toner præcist i et sweep
+  prevSmoothing = analyser.smoothingTimeConstant;
+  analyser.smoothingTimeConstant = 0;
+  sweepRecording = true;
+  const btn = document.getElementById('sweepRecordBtn');
+  btn.textContent = 'Stop måling';
+  btn.classList.remove('primary');
+  btn.classList.add('danger');
+  document.getElementById('sweepRecStatus').className = 'status recording';
+  document.getElementById('sweepRecLabel').textContent = 'Måler — smoothing fra';
+}
+
+function stopSweepRecord() {
+  if (analyser && prevSmoothing != null) {
+    analyser.smoothingTimeConstant = prevSmoothing;
+    prevSmoothing = null;
+  }
+  sweepRecording = false;
+  const btn = document.getElementById('sweepRecordBtn');
+  btn.textContent = 'Start måling';
+  btn.classList.remove('danger');
+  btn.classList.add('primary');
+  document.getElementById('sweepRecStatus').className = 'status';
+  document.getElementById('sweepRecLabel').textContent = 'Måling stoppet';
+}
+
+// ===== Tegning =====
+function draw() {
+  if (activeTab === 'time') drawTime();
+  else if (activeTab === 'fft') drawFft();
+  else if (activeTab === 'sweep') drawSweep();
+}
+
+// Bestemmer hvilket tidsudsnit (i ms) der vises - bruges af både tegning og klik
+// Tidsvinduet er nu relativt til "nu" (nyeste sample i historikken).
+// view.spanMs = vinduets bredde i ms
+// view.endOffsetMs = afstand fra nu tilbage til vinduets højre kant (0 = lige nu)
+function getTimeViewWindow() {
+  const span = timeZoomSpan !== null ? timeZoomSpan : timeWindow;
+  return {
+    spanMs: span * 1000,
+    endOffsetMs: timeZoomStart * 1000  // genbruger eksisterende state-variabel
+  };
+}
+
+function drawTime() {
+  const c = document.getElementById('timeCanvas');
+  const ctx = c.getContext('2d');
+  const W = c.clientWidth, H = parseInt(c.dataset.cssHeight || c.getAttribute('height'), 10);
+  ctx.clearRect(0, 0, W, H);
+
+  const bg = themeColor('--surface', '#fff');
+  const grid = themeColor('--chart-grid', '#eee');
+  const text = themeColor('--chart-text', '#2a2a2a');
+  const blue = themeColor('--blue', '#378ADD');
+  const brown = themeColor('--brown', '#993C1D');
+  const green = themeColor('--green', '#1D9E75');
+  const muted = themeColor('--muted', '#6b6b6b');
+
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const padL = 50, padR = 12, padT = 12, padB = 28;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  if (!history || (!audioCtx && !loadedSampleRate)) {
+    drawAxes(ctx, padL, padT, plotW, plotH, grid, text, muted,
+      '0', (timeWindow * 1000) + ' ms', '0', '');
+    return;
+  }
+  const sr = getEffectiveSampleRate();
+  const view = getTimeViewWindow();
+  // Hent samples for hele vinduet (start til slut)
+  // Vinduets højre kant: endOffsetMs tilbage fra nu
+  // Vinduets venstre kant: endOffsetMs + spanMs tilbage fra nu
+  const totalMs = view.endOffsetMs + view.spanMs;
+  const totalSamples = Math.min(historyLen, Math.ceil(totalMs / 1000 * sr));
+  if (totalSamples < 2) {
+    drawAxes(ctx, padL, padT, plotW, plotH, grid, text, muted,
+      '0', view.spanMs.toFixed(1) + ' ms', '0', '');
+    return;
+  }
+  const fullSlice = readHistoryTail(totalSamples);
+  // Det udsnit vi skal tegne er den ÆLDSTE del - de første viewSamples samples
+  const endSampleOffset = Math.floor(view.endOffsetMs / 1000 * sr);
+  const viewSamples = Math.floor(view.spanMs / 1000 * sr);
+  const startIdx = Math.max(0, fullSlice.length - endSampleOffset - viewSamples);
+  const endIdx = Math.min(fullSlice.length, fullSlice.length - endSampleOffset);
+  const nSamples = endIdx - startIdx;
+  if (nSamples < 2) {
+    drawAxes(ctx, padL, padT, plotW, plotH, grid, text, muted,
+      '0', view.spanMs.toFixed(1) + ' ms', '0', '');
+    return;
+  }
+
+  // Bestem y-grænser - kun fra synligt udsnit
+  let ymin = -1, ymax = 1;
+  if (yScale === 'auto') {
+    let m = 0.005;
+    for (let i = startIdx; i < endIdx; i++) {
+      const v = Math.abs(fullSlice[i]);
+      if (v > m) m = v;
+    }
+    m = Math.max(m * 1.2, 0.005);
+    ymax = m; ymin = -m;
+    document.getElementById('timeInfo').textContent =
+      'Y-skala: ±' + m.toFixed(3).replace('.', ',') +
+      '  ·  vindue: ' + view.spanMs.toFixed(1).replace('.', ',') + ' ms';
+  } else {
+    const s = parseFloat(yScale);
+    ymax = s; ymin = -s;
+    document.getElementById('timeInfo').textContent =
+      'Y-skala: ±' + s.toFixed(2).replace('.', ',') +
+      '  ·  vindue: ' + view.spanMs.toFixed(1).replace('.', ',') + ' ms';
+  }
+
+  // Akser: viser ms tilbage fra nu, venstre = ældste, højre = nyeste
+  const leftMs = view.endOffsetMs + view.spanMs;
+  const rightMs = view.endOffsetMs;
+  drawAxes(ctx, padL, padT, plotW, plotH, grid, text, muted,
+    '−' + leftMs.toFixed(1).replace('.', ',') + ' ms',
+    rightMs === 0 ? 'nu' : '−' + rightMs.toFixed(1).replace('.', ',') + ' ms',
+    ymin.toFixed(3).replace('.', ','), ymax.toFixed(3).replace('.', ','));
+
+  // Nul-linje
+  const zeroY = padT + plotH * (ymax / (ymax - ymin));
+  ctx.strokeStyle = grid;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padL, zeroY);
+  ctx.lineTo(padL + plotW, zeroY);
+  ctx.stroke();
+
+  // Signal - tegnes fra venstre (ældste) til højre (nyeste)
+  ctx.strokeStyle = blue;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let i = 0; i < nSamples; i++) {
+    const x = padL + (i / (nSamples - 1)) * plotW;
+    const v = fullSlice[startIdx + i];
+    const y = padT + plotH * (1 - (v - ymin) / (ymax - ymin));
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Markører - i "ms tilbage fra nu" koordinater (positive tal)
+  // Markøren placeres når brugeren klikker, og bliver dér selvom signalet
+  // ruller forbi - så de viser et bestemt punkt i fortiden.
+  function drawTimeMarker(msBack, color, label) {
+    if (msBack == null) return;
+    // Er markøren inden for det viste vindue?
+    if (msBack < rightMs || msBack > leftMs) return;
+    // x: leftMs sidder ved padL, rightMs sidder ved padL + plotW
+    const frac = (leftMs - msBack) / (leftMs - rightMs);
+    const x = padL + frac * plotW;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x, padT);
+    ctx.lineTo(x, padT + plotH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Værdi-prik på kurven
+    // Find sample-index i fullSlice der svarer til denne ms-værdi
+    const sIdx = fullSlice.length - 1 - Math.round(msBack / 1000 * sr);
+    if (sIdx >= 0 && sIdx < fullSlice.length) {
+      const v = fullSlice[sIdx];
+      const y = padT + plotH * (1 - (v - ymin) / (ymax - ymin));
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (label) {
+      ctx.fillStyle = color;
+      ctx.font = 'bold 12px Helvetica, Arial, sans-serif';
+      ctx.textAlign = x < padL + plotW - 60 ? 'left' : 'right';
+      const tx = x < padL + plotW - 60 ? x + 6 : x - 6;
+      ctx.fillText(label, tx, padT + 14);
+    }
+  }
+
+  drawTimeMarker(timeMarker1, brown, timeMarker2 == null ? 'A' : null);
+  drawTimeMarker(timeMarker2, brown, null);
+  if (timeHover != null && timeHover !== timeMarker1 && timeHover !== timeMarker2) {
+    drawTimeMarker(timeHover, muted, null);
+  }
+
+  // ΔT label hvis begge markører er sat
+  if (timeMarker1 != null && timeMarker2 != null) {
+    const dt = Math.abs(timeMarker2 - timeMarker1); // ms
+    const freq = dt > 0 ? (1000 / dt) : 0;
+    ctx.fillStyle = green;
+    ctx.font = 'bold 13px Helvetica, Arial, sans-serif';
+    ctx.textAlign = 'right';
+    const label = 'ΔT = ' + dt.toFixed(2).replace('.', ',') + ' ms' +
+                  '   1/ΔT = ' + freq.toFixed(1).replace('.', ',') + ' Hz';
+    ctx.fillText(label, padL + plotW - 6, padT + 14);
+    // Forbindelseslinje mellem A og B
+    function msBackToX(msBack) {
+      const frac = (leftMs - msBack) / (leftMs - rightMs);
+      return padL + frac * plotW;
+    }
+    const x1 = msBackToX(timeMarker1);
+    const x2 = msBackToX(timeMarker2);
+    const yLine = padT + 26;
+    ctx.strokeStyle = green;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(Math.max(padL, Math.min(padL + plotW, x1)), yLine);
+    ctx.lineTo(Math.max(padL, Math.min(padL + plotW, x2)), yLine);
+    ctx.stroke();
+  }
+
+  // Træk-zoom overlay
+  if (timeDragStart != null && timeHover != null) {
+    const frac1 = (leftMs - timeDragStart) / (leftMs - rightMs);
+    const frac2 = (leftMs - timeHover) / (leftMs - rightMs);
+    const x1 = padL + frac1 * plotW;
+    const x2 = padL + frac2 * plotW;
+    const xa = Math.min(x1, x2), xb = Math.max(x1, x2);
+    ctx.fillStyle = blue + '22';
+    ctx.fillRect(xa, padT, xb - xa, plotH);
+    ctx.strokeStyle = blue;
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(xa, padT, xb - xa, plotH);
+    ctx.setLineDash([]);
+  }
+
+  // Akse-labels
+  ctx.fillStyle = muted;
+  ctx.font = '11px Helvetica, Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Tid', padL + plotW / 2, H - 8);
+  ctx.save();
+  ctx.translate(14, padT + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.fillText('Signal (relativ)', 0, 0);
+  ctx.restore();
+}
+
+// Returnerer den effektive sampleRate til brug ved tegning.
+// Hvis vi viser indlæste data og audioCtx har en anden rate, foretrækker vi
+// den oprindelige (gemte) rate så bin-Hz er korrekt.
+function getEffectiveSampleRate() {
+  // Hvis mikrofonen kører, brug live audioCtx
+  if (analyser && audioCtx) return audioCtx.sampleRate;
+  // Hvis vi har indlæste data, brug deres sampleRate
+  if (loadedSampleRate) return loadedSampleRate;
+  // Fallback til audioCtx hvis den findes
+  if (audioCtx) return audioCtx.sampleRate;
+  return 48000;
+}
+
+// ===== Frekvens-akse hjælpefunktioner =====
+// Returnerer det aktuelle Hz-interval på FFT-x-aksen
+function getFftViewRange() {
+  const fmin = fftZoomMin !== null ? fftZoomMin : 0;
+  const fmax = fftZoomMax !== null ? fftZoomMax : maxFreq;
+  return { fmin, fmax };
+}
+
+// Konvertér Hz → x-pixel (relativ til plot-området, 0..plotW)
+function hzToX(hz, fmin, fmax, plotW) {
+  if (fftAxisType === 'log') {
+    // Logaritmisk: clamp fmin til mindst 1 Hz for at undgå log(0)
+    const lo = Math.max(1, fmin);
+    const hi = Math.max(lo * 1.001, fmax);
+    if (hz < lo) return -1; // udenfor til venstre
+    const t = (Math.log(hz) - Math.log(lo)) / (Math.log(hi) - Math.log(lo));
+    return t * plotW;
+  } else {
+    return (hz - fmin) / (fmax - fmin) * plotW;
+  }
+}
+
+// Konvertér x-pixel → Hz
+function xToHz(x, fmin, fmax, plotW) {
+  const frac = x / plotW;
+  if (fftAxisType === 'log') {
+    const lo = Math.max(1, fmin);
+    const hi = Math.max(lo * 1.001, fmax);
+    return Math.exp(Math.log(lo) + frac * (Math.log(hi) - Math.log(lo)));
+  } else {
+    return fmin + frac * (fmax - fmin);
+  }
+}
+
+function drawFft() {
+  const c = document.getElementById('fftCanvas');
+  const ctx = c.getContext('2d');
+  const W = c.clientWidth, H = parseInt(c.dataset.cssHeight || c.getAttribute('height'), 10);
+  ctx.clearRect(0, 0, W, H);
+
+  const bg = themeColor('--surface', '#fff');
+  const grid = themeColor('--chart-grid', '#eee');
+  const text = themeColor('--chart-text', '#2a2a2a');
+  const blue = themeColor('--blue', '#378ADD');
+  const brown = themeColor('--brown', '#993C1D');
+  const green = themeColor('--green', '#1D9E75');
+  const muted = themeColor('--muted', '#6b6b6b');
+
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const padL = 55, padR = 12, padT = 12, padB = 32;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  if (!freqData || (!audioCtx && !loadedSampleRate)) {
+    drawFreqAxis(ctx, padL, padT, plotW, plotH, grid, text, muted, 0, maxFreq);
+    return;
+  }
+
+  const sr = getEffectiveSampleRate();
+  const nyq = sr / 2;
+  const nBins = freqData.length;
+  const binHz = nyq / nBins;
+  const { fmin, fmax } = getFftViewRange();
+  // Bin-interval i visningen
+  const startBin = Math.max(0, Math.floor(fmin / binHz));
+  const endBin = Math.min(nBins, Math.ceil(fmax / binHz) + 1);
+
+  // Y-skala
+  let ymin, ymax;
+  if (fftScale === 'db') {
+    ymin = -90; ymax = -10;
+  } else {
+    let m = 0.001;
+    for (let i = startBin; i < endBin; i++) {
+      if (freqData[i] > m) m = freqData[i];
+    }
+    ymax = m * 1.15; ymin = 0;
+  }
+
+  // Frekvens-akse: gitter og x-labels
+  drawFreqAxis(ctx, padL, padT, plotW, plotH, grid, text, muted, fmin, fmax);
+
+  // Y-akse labels
+  ctx.fillStyle = muted;
+  ctx.font = '11px Helvetica, Arial, sans-serif';
+  ctx.textAlign = 'right';
+  if (fftScale === 'db') {
+    for (let v = -90; v <= -10; v += 20) {
+      const y = padT + plotH * (1 - (v - ymin) / (ymax - ymin));
+      ctx.fillText(v + ' dB', padL - 6, y + 3);
+      ctx.strokeStyle = grid; ctx.beginPath();
+      ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+    }
+  } else {
+    for (let k = 0; k <= 4; k++) {
+      const v = ymin + (ymax - ymin) * k / 4;
+      const y = padT + plotH * (1 - k / 4);
+      ctx.fillText(v.toFixed(3).replace('.', ','), padL - 6, y + 3);
+      ctx.strokeStyle = grid; ctx.beginPath();
+      ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+    }
+  }
+
+  // Spektrum
+  ctx.strokeStyle = blue;
+  ctx.fillStyle = blue + '33';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  let started = false;
+  for (let i = startBin; i < endBin; i++) {
+    const hz = i * binHz;
+    const xRel = hzToX(hz, fmin, fmax, plotW);
+    if (xRel < 0) continue;
+    const x = padL + xRel;
+    let v = (fftScale === 'db') ? freqDataDb[i] : freqData[i];
+    let y = padT + plotH * (1 - (v - ymin) / (ymax - ymin));
+    y = Math.max(padT, Math.min(padT + plotH, y));
+    if (!started) { ctx.moveTo(x, padT + plotH); ctx.lineTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  if (started) {
+    ctx.lineTo(padL + plotW, padT + plotH);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.beginPath();
+  started = false;
+  for (let i = startBin; i < endBin; i++) {
+    const hz = i * binHz;
+    const xRel = hzToX(hz, fmin, fmax, plotW);
+    if (xRel < 0) continue;
+    const x = padL + xRel;
+    let v = (fftScale === 'db') ? freqDataDb[i] : freqData[i];
+    let y = padT + plotH * (1 - (v - ymin) / (ymax - ymin));
+    y = Math.max(padT, Math.min(padT + plotH, y));
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Top-detektion
+  if (fftPeakDetect) {
+    const peaks = findPeaks(freqData, binHz, fmin, fmax, fftPeakCount);
+    drawPeakLabels(ctx, peaks, padL, padT, plotW, plotH, fmin, fmax, ymin, ymax, green);
+  }
+
+  // Markør og hover
+  drawMarkerOnFft(ctx, padL, padT, plotW, plotH, brown, muted, text,
+    fftMarkerHz, fftHoverHz, binHz, ymin, ymax, fmin, fmax);
+
+  // Træk-zoom overlay
+  if (fftDragStart != null && fftHoverHz != null) {
+    const x1 = padL + hzToX(fftDragStart, fmin, fmax, plotW);
+    const x2 = padL + hzToX(fftHoverHz, fmin, fmax, plotW);
+    const xa = Math.min(x1, x2), xb = Math.max(x1, x2);
+    ctx.fillStyle = blue + '22';
+    ctx.fillRect(xa, padT, xb - xa, plotH);
+    ctx.strokeStyle = blue;
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(xa, padT, xb - xa, plotH);
+    ctx.setLineDash([]);
+  }
+
+  // Akse-titler
+  ctx.fillStyle = muted;
+  ctx.font = '11px Helvetica, Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Frekvens (Hz)', padL + plotW / 2, H - 8);
+  ctx.save();
+  ctx.translate(14, padT + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText(fftScale === 'db' ? 'Niveau (dB)' : 'Amplitude (relativ)', 0, 0);
+  ctx.restore();
+}
+
+// ===== Top-detektion =====
+// Finder de N stærkeste lokale toppe i spektret inden for [fmin, fmax].
+// Returner array af {hz, amp}, sorteret efter amp faldende.
+function findPeaks(data, binHz, fmin, fmax, n) {
+  const startBin = Math.max(1, Math.floor(fmin / binHz));
+  const endBin = Math.min(data.length - 1, Math.ceil(fmax / binHz));
+  // Find lokale maksimumspunkter
+  const candidates = [];
+  for (let i = startBin; i < endBin; i++) {
+    if (data[i] > data[i - 1] && data[i] > data[i + 1] && data[i] > 0.0005) {
+      // Parabolisk interpolation for præcis frekvens
+      const y0 = data[i - 1], y1 = data[i], y2 = data[i + 1];
+      const denom = (y0 - 2 * y1 + y2);
+      let offset = 0;
+      if (Math.abs(denom) > 1e-12) {
+        offset = 0.5 * (y0 - y2) / denom;
+        offset = Math.max(-0.5, Math.min(0.5, offset));
+      }
+      const hz = (i + offset) * binHz;
+      candidates.push({ hz, amp: y1, bin: i });
+    }
+  }
+  // Sortér efter amplitude
+  candidates.sort((a, b) => b.amp - a.amp);
+  // Tag top N, men spred dem ud så vi ikke får 10 toppe i samme cluster
+  const picked = [];
+  const minSepBins = 3; // minimum afstand mellem toppe i bins
+  for (const cand of candidates) {
+    if (picked.length >= n) break;
+    let tooClose = false;
+    for (const p of picked) {
+      if (Math.abs(p.bin - cand.bin) < minSepBins) { tooClose = true; break; }
+    }
+    if (!tooClose) picked.push(cand);
+  }
+  return picked;
+}
+
+function drawPeakLabels(ctx, peaks, padL, padT, plotW, plotH, fmin, fmax, ymin, ymax, color) {
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  for (let i = 0; i < peaks.length; i++) {
+    const p = peaks[i];
+    const xRel = hzToX(p.hz, fmin, fmax, plotW);
+    if (xRel < 0 || xRel > plotW) continue;
+    const x = padL + xRel;
+    let v = fftScale === 'db' ? (20 * Math.log10(Math.max(p.amp, 1e-12))) : p.amp;
+    let y = padT + plotH * (1 - (v - ymin) / (ymax - ymin));
+    y = Math.max(padT, Math.min(padT + plotH, y));
+    // Lille prik
+    ctx.beginPath();
+    ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    // Label - alternerer højde for at undgå overlap mellem nabolabels
+    ctx.font = 'bold 11px Helvetica, Arial, sans-serif';
+    ctx.textAlign = 'center';
+    const label = p.hz < 1000 ? p.hz.toFixed(0) + ' Hz'
+                              : (p.hz / 1000).toFixed(2).replace('.', ',') + ' kHz';
+    const labelY = Math.max(padT + 12, y - 8 - (i % 2) * 12);
+    // Lille hvid baggrund så teksten er læselig
+    const tw = ctx.measureText(label).width;
+    const bg = themeColor('--surface', '#fff');
+    ctx.fillStyle = bg + 'dd';
+    ctx.fillRect(x - tw / 2 - 2, labelY - 10, tw + 4, 12);
+    ctx.fillStyle = color;
+    ctx.fillText(label, x, labelY);
+  }
+}
+
+function drawSweep() {
+  const c = document.getElementById('sweepCanvas');
+  const ctx = c.getContext('2d');
+  const W = c.clientWidth, H = parseInt(c.dataset.cssHeight || c.getAttribute('height'), 10);
+  ctx.clearRect(0, 0, W, H);
+
+  const bg = themeColor('--surface', '#fff');
+  const grid = themeColor('--chart-grid', '#eee');
+  const text = themeColor('--chart-text', '#2a2a2a');
+  const green = themeColor('--green', '#1D9E75');
+  const blue = themeColor('--blue', '#378ADD');
+  const brown = themeColor('--brown', '#993C1D');
+  const muted = themeColor('--muted', '#6b6b6b');
+
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const padL = 55, padR = 12, padT = 12, padB = 32;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  if (!audioCtx && !loadedSampleRate) {
+    drawFreqAxis(ctx, padL, padT, plotW, plotH, grid, text, muted, 0, maxFreq);
+    return;
+  }
+
+  const sr = getEffectiveSampleRate();
+  const nyq = sr / 2;
+  // Bin-antal: fra live analyser, eller fra de indlæste data
+  let N;
+  if (analyser) N = analyser.frequencyBinCount;
+  else if (peakSpectrum) N = peakSpectrum.length;
+  else if (freqData) N = freqData.length;
+  else N = 1024;
+  const binHz = nyq / N;
+  const maxBin = Math.min(N, Math.ceil(maxFreq / binHz));
+
+  const showData = sweepMode === 'peak' ? peakSpectrum : currentSpectrum;
+
+  let ymax = 0.001;
+  if (showData) {
+    for (let i = 0; i < Math.min(maxBin, showData.length); i++) {
+      if (showData[i] > ymax) ymax = showData[i];
+    }
+  }
+  ymax *= 1.15;
+  const ymin = 0;
+
+  // Sweep bruger altid lineær akse fra 0 til maxFreq (uafhængigt af FFT-fanens zoom)
+  // Vi midlertidigt deaktiverer log-akse her ved at gemme/genskabe tilstanden
+  const savedAxisType = fftAxisType;
+  fftAxisType = 'lin';
+  drawFreqAxis(ctx, padL, padT, plotW, plotH, grid, text, muted, 0, maxFreq);
+  // Y-akse
+  ctx.fillStyle = muted;
+  ctx.font = '11px Helvetica, Arial, sans-serif';
+  ctx.textAlign = 'right';
+  for (let k = 0; k <= 4; k++) {
+    const v = ymin + (ymax - ymin) * k / 4;
+    const y = padT + plotH * (1 - k / 4);
+    ctx.fillText(v.toFixed(3).replace('.', ','), padL - 6, y + 3);
+    ctx.strokeStyle = grid; ctx.beginPath();
+    ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+  }
+
+  if (showData) {
+    const drawColor = sweepMode === 'peak' ? green : blue;
+    ctx.strokeStyle = drawColor;
+    ctx.fillStyle = drawColor + '33';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < Math.min(maxBin, showData.length); i++) {
+      const hz = i * binHz;
+      const x = padL + (hz / maxFreq) * plotW;
+      const v = showData[i];
+      let y = padT + plotH * (1 - (v - ymin) / (ymax - ymin));
+      y = Math.max(padT, Math.min(padT + plotH, y));
+      if (!started) { ctx.moveTo(x, padT + plotH); ctx.lineTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    }
+    ctx.lineTo(padL + plotW, padT + plotH);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    started = false;
+    for (let i = 0; i < Math.min(maxBin, showData.length); i++) {
+      const hz = i * binHz;
+      const x = padL + (hz / maxFreq) * plotW;
+      const v = showData[i];
+      let y = padT + plotH * (1 - (v - ymin) / (ymax - ymin));
+      y = Math.max(padT, Math.min(padT + plotH, y));
+      if (!started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  drawMarkerOnFft(ctx, padL, padT, plotW, plotH, brown, muted, text,
+    sweepMarkerHz, sweepHoverHz, binHz, ymin, ymax, 0, maxFreq, showData);
+  // Genskab axe-type til FFT-fanen
+  fftAxisType = savedAxisType;
+
+  // Sweep-progress indikator: viser hvor de interne generatorer er lige nu
+  const colors = [blue, brown];
+  for (const id of [1, 2]) {
+    const hz = getCurrentSweepHz(id);
+    if (hz == null) continue;
+    if (hz < 0 || hz > maxFreq) continue;
+    const x = padL + (hz / maxFreq) * plotW;
+    const color = colors[id - 1];
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([2, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x, padT);
+    ctx.lineTo(x, padT + plotH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Lille trekant øverst som indikator
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x - 4, padT);
+    ctx.lineTo(x + 4, padT);
+    ctx.lineTo(x, padT + 6);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Opdatér info-feltet
+  const info = document.getElementById('sweepInfo');
+  const parts = [];
+  if (sweepRecording) parts.push('måler…');
+  for (const id of [1, 2]) {
+    const hz = getCurrentSweepHz(id);
+    if (hz != null) {
+      parts.push('G' + id + ': ' + hz.toFixed(0) + ' Hz');
+    }
+  }
+  if (parts.length > 0 && (sweepHoverHz == null && sweepMarkerHz == null)) {
+    info.textContent = parts.join('  ·  ');
+  }
+
+  // Akse-titler
+  ctx.fillStyle = muted;
+  ctx.font = '11px Helvetica, Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Frekvens (Hz)', padL + plotW / 2, H - 8);
+  ctx.save();
+  ctx.translate(14, padT + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('Amplitude (maks)', 0, 0);
+  ctx.restore();
+}
+
+function drawFreqAxis(ctx, padL, padT, plotW, plotH, grid, text, muted, fmin, fmax) {
+  const steps = fftAxisType === 'log'
+    ? niceStepsLog(Math.max(1, fmin), fmax)
+    : niceStepsLin(fmin, fmax);
+  ctx.strokeStyle = grid;
+  ctx.fillStyle = muted;
+  ctx.font = '11px Helvetica, Arial, sans-serif';
+  ctx.textAlign = 'center';
+  for (const f of steps) {
+    if (f < fmin || f > fmax) continue;
+    const xRel = hzToX(f, fmin, fmax, plotW);
+    if (xRel < 0 || xRel > plotW) continue;
+    const x = padL + xRel;
+    ctx.beginPath();
+    ctx.moveTo(x, padT);
+    ctx.lineTo(x, padT + plotH);
+    ctx.stroke();
+    let label;
+    if (f >= 1000) {
+      label = (f / 1000).toFixed(f >= 10000 ? 0 : 1).replace('.0', '').replace('.', ',') + ' k';
+    } else if (f >= 10) {
+      label = f.toFixed(0);
+    } else {
+      label = f.toFixed(1).replace('.', ',');
+    }
+    ctx.fillText(label, x, padT + plotH + 14);
+  }
+  // Plot-ramme
+  ctx.strokeStyle = muted;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(padL, padT, plotW, plotH);
+}
+
+function niceStepsLin(fmin, fmax) {
+  const range = fmax - fmin;
+  // Sigt efter ca. 6-10 ticks
+  const rough = range / 8;
+  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+  const norm = rough / mag;
+  let step;
+  if (norm < 1.5) step = mag;
+  else if (norm < 3) step = 2 * mag;
+  else if (norm < 7) step = 5 * mag;
+  else step = 10 * mag;
+  const out = [];
+  const first = Math.ceil(fmin / step) * step;
+  for (let f = first; f <= fmax; f += step) out.push(f);
+  return out;
+}
+
+function niceStepsLog(fmin, fmax) {
+  // Returnér 1, 2, 5 × 10^k mellem fmin og fmax
+  const out = [];
+  const lo = Math.max(1, fmin);
+  const startDec = Math.floor(Math.log10(lo));
+  const endDec = Math.ceil(Math.log10(fmax));
+  for (let d = startDec; d <= endDec; d++) {
+    const base = Math.pow(10, d);
+    for (const m of [1, 2, 5]) {
+      const f = m * base;
+      if (f >= lo && f <= fmax) out.push(f);
+    }
+  }
+  return out;
+}
+
+function drawAxes(ctx, padL, padT, plotW, plotH, grid, text, muted, x0, x1, y0, y1) {
+  ctx.strokeStyle = muted;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(padL, padT, plotW, plotH);
+  ctx.fillStyle = muted;
+  ctx.font = '11px Helvetica, Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(x0, padL, padT + plotH + 14);
+  ctx.textAlign = 'right';
+  ctx.fillText(x1, padL + plotW, padT + plotH + 14);
+  ctx.textAlign = 'right';
+  ctx.fillText(y0, padL - 6, padT + plotH + 3);
+  ctx.fillText(y1, padL - 6, padT + 8);
+}
+
+function drawMarkerOnFft(ctx, padL, padT, plotW, plotH, brown, muted, text,
+                          markerHz, hoverHz, binHz, ymin, ymax, fmin, fmax, dataOverride) {
+  const data = dataOverride || freqData;
+
+  function drawLine(hz, dashed, color, labelInfo) {
+    if (hz == null) return;
+    const xRel = hzToX(hz, fmin, fmax, plotW);
+    if (xRel < 0 || xRel > plotW) return;
+    const x = padL + xRel;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.2;
+    if (dashed) ctx.setLineDash([4, 4]);
+    else ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(x, padT);
+    ctx.lineTo(x, padT + plotH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Find amplitude
+    if (data) {
+      const bin = Math.round(hz / binHz);
+      if (bin >= 0 && bin < data.length) {
+        const v = data[bin];
+        let y;
+        if (fftScale === 'db' && data === freqData) {
+          // Vi tegner FFT i dB-mode; brug dB-data
+          const vdb = freqDataDb[bin];
+          y = padT + plotH * (1 - (vdb - ymin) / (ymax - ymin));
+        } else {
+          y = padT + plotH * (1 - (v - ymin) / (ymax - ymin));
+        }
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    if (labelInfo) {
+      // Tekstetiket
+      ctx.fillStyle = color;
+      ctx.font = 'bold 12px Helvetica, Arial, sans-serif';
+      ctx.textAlign = x < padL + plotW - 80 ? 'left' : 'right';
+      const tx = x < padL + plotW - 80 ? x + 6 : x - 6;
+      ctx.fillText(labelInfo, tx, padT + 14);
+    }
+  }
+
+  // Hover (let)
+  if (hoverHz != null && hoverHz !== markerHz) {
+    drawLine(hoverHz, true, muted, null);
+  }
+  // Markør (kraftig)
+  if (markerHz != null) {
+    const bin = Math.round(markerHz / binHz);
+    let info = markerHz.toFixed(1).replace('.', ',') + ' Hz';
+    if (data && bin >= 0 && bin < data.length) {
+      const v = data[bin];
+      if (fftScale === 'db' && data === freqData) {
+        info += '  •  ' + freqDataDb[bin].toFixed(1).replace('.', ',') + ' dB';
+      } else {
+        info += '  •  ' + v.toFixed(4).replace('.', ',');
+      }
+    }
+    drawLine(markerHz, true, brown, info);
+  }
+}
+
+// ===== Klik/hover på grafer =====
+// FFT-canvas: konvertér x-pixel til Hz, med korrekt akse-type og zoom
+function canvasToHzFft(event) {
+  const c = document.getElementById('fftCanvas');
+  const rect = c.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const W = c.clientWidth;
+  const padL = 55, padR = 12;
+  const plotW = W - padL - padR;
+  if (x < padL || x > padL + plotW) return null;
+  const { fmin, fmax } = getFftViewRange();
+  return xToHz(x - padL, fmin, fmax, plotW);
+}
+
+// Sweep-canvas: altid lineær 0..maxFreq (sweep har ingen zoom-state)
+function canvasToHzSweep(event) {
+  const c = document.getElementById('sweepCanvas');
+  const rect = c.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const W = c.clientWidth;
+  const padL = 55, padR = 12;
+  const plotW = W - padL - padR;
+  if (x < padL || x > padL + plotW) return null;
+  return ((x - padL) / plotW) * maxFreq;
+}
+
+// Bevares for kompatibilitet med eksisterende kald
+function canvasToHz(canvasId, event) {
+  if (canvasId === 'fftCanvas') return canvasToHzFft(event);
+  return canvasToHzSweep(event);
+}
+
+function onFftClick(e) {
+  if (e.shiftKey || fftDragStart != null) return; // shift-drag håndteres separat
+  const hz = canvasToHzFft(e);
+  if (hz != null) {
+    fftMarkerHz = hz;
+    updateFftInfo();
+    draw();
+  }
+}
+function onFftHover(e) {
+  const hz = canvasToHzFft(e);
+  fftHoverHz = hz;
+  updateFftInfo();
+  draw();
+}
+function onFftLeave() {
+  fftHoverHz = null;
+  fftDragStart = null;
+  updateFftInfo();
+  draw();
+}
+
+function onFftDown(e) {
+  if (e.shiftKey) {
+    const hz = canvasToHzFft(e);
+    if (hz != null) fftDragStart = hz;
+  }
+}
+
+function onFftUp(e) {
+  if (fftDragStart != null) {
+    const hz = canvasToHzFft(e);
+    if (hz != null) {
+      const a = Math.min(fftDragStart, hz);
+      const b = Math.max(fftDragStart, hz);
+      if (b - a > 1) {
+        fftZoomMin = Math.max(0, a);
+        fftZoomMax = b;
+      }
+    }
+    fftDragStart = null;
+    draw();
+  }
+}
+
+function onFftWheel(e) {
+  e.preventDefault();
+  const hz = canvasToHzFft(e);
+  if (hz == null) return;
+  const factor = e.deltaY > 0 ? 1.25 : 0.8;
+  const { fmin, fmax } = getFftViewRange();
+  let newMin, newMax;
+  if (fftAxisType === 'log') {
+    const lo = Math.max(1, fmin);
+    const logLo = Math.log(lo);
+    const logHi = Math.log(fmax);
+    const logHz = Math.log(Math.max(1, hz));
+    const frac = (logHz - logLo) / (logHi - logLo);
+    const newLogSpan = (logHi - logLo) * factor;
+    const newLogLo = logHz - frac * newLogSpan;
+    const newLogHi = newLogLo + newLogSpan;
+    newMin = Math.max(1, Math.exp(newLogLo));
+    newMax = Math.min(maxFreq, Math.exp(newLogHi));
+  } else {
+    const span = fmax - fmin;
+    const frac = (hz - fmin) / span;
+    const newSpan = Math.max(5, span * factor);
+    newMin = Math.max(0, hz - frac * newSpan);
+    newMax = newMin + newSpan;
+    // Hvis vi løber ud over maxFreq i højre side, klip og juster venstre side
+    if (newMax > maxFreq) {
+      newMax = maxFreq;
+      newMin = Math.max(0, newMax - newSpan);
+    }
+  }
+  if (newMax - newMin < 5) return; // hindre overzoom
+  fftZoomMin = newMin;
+  fftZoomMax = newMax;
+  if (newMin <= 0.5 && newMax >= maxFreq * 0.999) resetFftZoom();
+  draw();
+}
+
+function zoomFft(factor) {
+  const { fmin, fmax } = getFftViewRange();
+  // Zoom-ankerpunkt: markør hvis sat, ellers hover, ellers vindue-centrum
+  let anchor;
+  if (fftMarkerHz != null) anchor = fftMarkerHz;
+  else if (fftHoverHz != null) anchor = fftHoverHz;
+  else anchor = (fmin + fmax) / 2;
+  // Sørg for at ankerpunktet er inden for det nuværende vindue
+  anchor = Math.max(fmin, Math.min(fmax, anchor));
+
+  if (fftAxisType === 'log') {
+    const lo = Math.max(1, fmin);
+    const logLo = Math.log(lo);
+    const logHi = Math.log(fmax);
+    const logAnchor = Math.log(Math.max(1, anchor));
+    // Hvor sidder ankerpunktet i den aktuelle visning? (0..1)
+    const frac = (logAnchor - logLo) / (logHi - logLo);
+    const newLogSpan = (logHi - logLo) * factor;
+    // Behold samme frac
+    const newLogLo = logAnchor - frac * newLogSpan;
+    const newLogHi = newLogLo + newLogSpan;
+    fftZoomMin = Math.max(1, Math.exp(newLogLo));
+    fftZoomMax = Math.min(maxFreq, Math.exp(newLogHi));
+  } else {
+    const span = fmax - fmin;
+    const frac = (anchor - fmin) / span;
+    const newSpan = Math.max(5, span * factor);
+    fftZoomMin = Math.max(0, anchor - frac * newSpan);
+    fftZoomMax = Math.min(maxFreq, fftZoomMin + newSpan);
+    // Hvis vi ramte loftet og blev for smal, korrigér fra højre
+    if (fftZoomMax - fftZoomMin < newSpan * 0.95) {
+      fftZoomMin = Math.max(0, fftZoomMax - newSpan);
+    }
+  }
+  if (fftZoomMin <= 0.5 && fftZoomMax >= maxFreq * 0.999) resetFftZoom();
+  draw();
+}
+
+function resetFftZoom() {
+  fftZoomMin = null;
+  fftZoomMax = null;
+  draw();
+}
+
+function onFftAxisChange() {
+  fftAxisType = document.getElementById('fftAxisSel').value;
+  draw();
+}
+
+function onFftPeakChange() {
+  fftPeakDetect = document.getElementById('fftPeakChk').checked;
+  draw();
+}
+
+function onFftPeakCountChange() {
+  fftPeakCount = parseInt(document.getElementById('fftPeakCountSel').value, 10);
+  draw();
+}
+
+function updateFftInfo() {
+  const info = document.getElementById('fftInfo');
+  const hz = fftHoverHz != null ? fftHoverHz : fftMarkerHz;
+  if (hz == null || !freqData || (!audioCtx && !loadedSampleRate)) {
+    info.textContent = 'Klik i grafen for at måle en frekvens';
+    return;
+  }
+  const sr = getEffectiveSampleRate();
+  const binHz = (sr / 2) / freqData.length;
+  const bin = Math.round(hz / binHz);
+  if (bin < 0 || bin >= freqData.length) {
+    info.textContent = '—';
+    return;
+  }
+  const ampL = freqData[bin];
+  const ampD = freqDataDb[bin];
+  const prefix = fftHoverHz != null && fftHoverHz !== fftMarkerHz ? 'Hover: ' : 'Markør: ';
+  info.textContent = prefix + hz.toFixed(1).replace('.', ',') + ' Hz' +
+    '  ·  ' + ampL.toFixed(4).replace('.', ',') +
+    '  ·  ' + ampD.toFixed(1).replace('.', ',') + ' dB';
+}
+
+function onSweepClick(e) {
+  const hz = canvasToHz('sweepCanvas', e);
+  if (hz != null) { sweepMarkerHz = hz; updateSweepInfo(); draw(); }
+}
+function onSweepHover(e) {
+  const hz = canvasToHz('sweepCanvas', e);
+  sweepHoverHz = hz;
+  updateSweepInfo();
+  draw();
+}
+function onSweepLeave() { sweepHoverHz = null; updateSweepInfo(); draw(); }
+
+function updateSweepInfo() {
+  const info = document.getElementById('sweepInfo');
+  const hz = sweepHoverHz != null ? sweepHoverHz : sweepMarkerHz;
+  const data = sweepMode === 'peak' ? peakSpectrum : currentSpectrum;
+  if (hz == null || !data || (!audioCtx && !loadedSampleRate)) {
+    info.textContent = 'Klik for at måle en frekvens';
+    return;
+  }
+  const sr = getEffectiveSampleRate();
+  const binHz = (sr / 2) / data.length;
+  const bin = Math.round(hz / binHz);
+  if (bin < 0 || bin >= data.length) {
+    info.textContent = '—';
+    return;
+  }
+  const prefix = sweepHoverHz != null && sweepHoverHz !== sweepMarkerHz ? 'Hover: ' : 'Markør: ';
+  info.textContent = prefix + hz.toFixed(1).replace('.', ',') + ' Hz' +
+    '  ·  amplitude ' + data[bin].toFixed(4).replace('.', ',');
+}
+
+// ===== Tidssignal: klik, hover, zoom =====
+// Konverterer mus-x på timeCanvas til tid (i ms) inden for den aktuelle visning
+// canvasToTimeMs returnerer "ms tilbage fra nu" - venstre kant af visningen
+// giver det største tal (ældst), højre kant det mindste (nyeste).
+function canvasToTimeMs(event) {
+  const c = document.getElementById('timeCanvas');
+  const rect = c.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const W = c.clientWidth;
+  const padL = 50, padR = 12;
+  const plotW = W - padL - padR;
+  if (x < padL || x > padL + plotW) return null;
+  const view = getTimeViewWindow();
+  const leftMs = view.endOffsetMs + view.spanMs;
+  const rightMs = view.endOffsetMs;
+  const frac = (x - padL) / plotW;
+  return leftMs - frac * (leftMs - rightMs);
+}
+
+function onTimeDown(e) {
+  if (e.shiftKey) {
+    const ms = canvasToTimeMs(e);
+    if (ms != null) timeDragStart = ms;
+  }
+}
+
+function onTimeUp(e) {
+  if (timeDragStart != null) {
+    const ms = canvasToTimeMs(e);
+    if (ms != null) {
+      // Vi har to ms-værdier (positive, ms tilbage fra nu)
+      // Største = venstre kant (ældst), mindste = højre kant (nyeste)
+      const left = Math.max(timeDragStart, ms);
+      const right = Math.min(timeDragStart, ms);
+      if (left - right > 0.05) {
+        timeZoomStart = right / 1000;          // endOffsetMs → sekunder
+        timeZoomSpan = (left - right) / 1000;
+      }
+    }
+    timeDragStart = null;
+    draw();
+  }
+}
+
+function onTimeClick(e) {
+  if (e.shiftKey || timeDragStart != null) return;
+  const ms = canvasToTimeMs(e);
+  if (ms == null) return;
+  if (timeMarker1 == null) {
+    timeMarker1 = ms;
+  } else if (timeMarker2 == null) {
+    timeMarker2 = ms;
+  } else {
+    timeMarker1 = ms;
+    timeMarker2 = null;
+  }
+  draw();
+}
+
+function onTimeRightClick(e) {
+  const ms = canvasToTimeMs(e);
+  if (ms == null) return;
+  const d1 = timeMarker1 != null ? Math.abs(timeMarker1 - ms) : Infinity;
+  const d2 = timeMarker2 != null ? Math.abs(timeMarker2 - ms) : Infinity;
+  if (d1 < d2) timeMarker1 = null;
+  else if (d2 !== Infinity) timeMarker2 = null;
+  draw();
+}
+
+function onTimeHover(e) {
+  timeHover = canvasToTimeMs(e);
+  draw();
+}
+
+function onTimeLeave() {
+  timeHover = null;
+  timeDragStart = null;
+  draw();
+}
+
+function onTimeWheel(e) {
+  e.preventDefault();
+  const ms = canvasToTimeMs(e);
+  if (ms == null) return;
+  const factor = e.deltaY > 0 ? 1.25 : 0.8;
+  const view = getTimeViewWindow();
+  const maxSpanSec = Math.max(timeWindow, HISTORY_SECONDS);
+  const newSpanSec = Math.max(0.0005, Math.min(view.spanMs / 1000 * factor, maxSpanSec));
+  // Hold musepunktet (ms tilbage fra nu) på samme x-position
+  const leftMs = view.endOffsetMs + view.spanMs;
+  const rightMs = view.endOffsetMs;
+  const frac = (leftMs - ms) / (leftMs - rightMs); // 0 = venstre, 1 = højre
+  // I det nye vindue: ms skal stadig være på samme frac
+  // newRight + frac * (newLeft - newRight) ... vent, lad os tænke om:
+  // x sidder på frac fra venstre. I nye koordinater: ms = newLeft - frac * newSpan
+  // → newLeft = ms + frac * newSpan
+  // → newRight = newLeft - newSpan
+  const newSpanMs = newSpanSec * 1000;
+  const newLeftMs = ms + frac * newSpanMs;
+  const newRightMs = Math.max(0, newLeftMs - newSpanMs);
+  timeZoomStart = newRightMs / 1000;
+  timeZoomSpan = newSpanSec;
+  draw();
+}
+
+function zoomTime(factor) {
+  const view = getTimeViewWindow();
+  const maxSpanSec = Math.max(timeWindow, HISTORY_SECONDS);
+  const newSpanSec = Math.max(0.0005, Math.min(view.spanMs / 1000 * factor, maxSpanSec));
+  // Zoom om centrum af nuværende vindue
+  const centerMs = view.endOffsetMs + view.spanMs / 2;
+  const newSpanMs = newSpanSec * 1000;
+  const newRightMs = Math.max(0, centerMs - newSpanMs / 2);
+  timeZoomStart = newRightMs / 1000;
+  timeZoomSpan = newSpanSec;
+  draw();
+}
+
+function resetTimeZoom() {
+  timeZoomStart = 0;
+  timeZoomSpan = null;
+  draw();
+}
+
+function clearTimeMarkers() {
+  timeMarker1 = null;
+  timeMarker2 = null;
+  draw();
+}
+</script>
+
+</body>
+</html>
