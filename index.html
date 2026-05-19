@@ -469,11 +469,17 @@ canvas {
     <div class="control-group" id="micDeviceGroup" style="display:none">
       <label>Input</label>
       <select id="micDeviceSel" onchange="onMicDeviceChange()" style="max-width:200px"></select>
+      <button class="small" onclick="refreshMicDeviceList()" title="Genindlæs listen over tilgængelige mikrofoner">↻</button>
     </div>
     <div class="control-group">
       <label>Følsomhed</label>
       <input type="range" id="micGain" min="0" max="100" value="50" step="1" oninput="onMicGainInput()" style="width:120px">
       <span class="value-display" id="micGainVal">1,0×</span>
+    </div>
+    <div class="control-group" title="Fjerner lavfrekvent støj (trafikrumlen, håndteringsstøj, mikrofon-drift) før FFT">
+      <label><input type="checkbox" id="highpassChk" onchange="onHighpassToggle()"> Højpas</label>
+      <input type="number" id="highpassCutoff" min="20" max="2000" value="150" step="10" style="width:70px" onchange="onHighpassCutoffChange()" disabled>
+      <span class="unit">Hz</span>
     </div>
     <div class="control-group">
       <label>Maks. frekvens</label>
@@ -664,6 +670,11 @@ canvas {
         </select>
       </div>
       <div class="control-group">
+        <label>Y-maks</label>
+        <input type="text" id="fftYMax" placeholder="auto" value="" style="width:80px" oninput="onFftYMaxInput()">
+        <button class="small" onclick="setFftYMax(0)">auto</button>
+      </div>
+      <div class="control-group">
         <label>Udjævning</label>
         <input type="range" id="fftSmooth" min="0" max="95" value="50" step="5" oninput="onFftSmoothInput()">
         <span class="value-display" id="fftSmoothVal">0,50</span>
@@ -702,7 +713,7 @@ canvas {
       <span><b>Sweep-respons</b></span>
       <span class="graph-info" id="sweepInfo">Klik for at måle en frekvens</span>
     </div>
-    <canvas id="sweepCanvas" height="320" onclick="onSweepClick(event)" onmousemove="onSweepHover(event)" onmouseleave="onSweepLeave()"></canvas>
+    <canvas id="sweepCanvas" height="320" onmousedown="onSweepMouseDown(event)" onmousemove="onSweepMouseMove(event)" onmouseup="onSweepMouseUp(event)" onmouseleave="onSweepMouseLeave(event)" oncontextmenu="onSweepContextMenu(event)"></canvas>
   </div>
   <div class="panel">
     <div class="panel-row">
@@ -718,11 +729,29 @@ canvas {
         </select>
       </div>
       <div class="control-group">
+        <label>Y-akse</label>
+        <select id="sweepScaleSel" onchange="onSweepScaleChange()">
+          <option value="linear" selected>Lineær</option>
+          <option value="db">Decibel (dB)</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Y-maks</label>
+        <input type="text" id="sweepYMaxInput" placeholder="auto" value="" style="width:80px" oninput="onSweepYMaxInput()">
+        <button class="small" onclick="setSweepYMax(0)">auto</button>
+      </div>
+      <div class="control-group">
         <button onclick="clearSweep()">Nulstil opsamling</button>
         <button onclick="clearSweepMarker()">Ryd markør</button>
       </div>
+      <div class="control-group" title="Estimer en baggrunds-støjgulv og træk den fra visningen. Selve dataene ændres ikke.">
+        <label><input type="checkbox" id="sweepFloorChk" onchange="onSweepFloorToggle()"> Træk baggrund fra</label>
+      </div>
+      <div class="control-group">
+        <button onclick="clearCentroidRegion()" id="centroidClearBtn" style="display:none">Ryd centroid-område</button>
+      </div>
     </div>
-    <div class="help-text">Tryk "Start måling" lige før du starter sweepet — så slås FFT-udjævning fra og toppe fanges præcist. Tryk "Stop" når sweepet er færdigt.</div>
+    <div class="help-text">Tryk "Start måling" lige før du starter sweepet — så slås FFT-udjævning fra og toppe fanges præcist. Tryk "Stop" når sweepet er færdigt. <b>Træk</b> hen over en top for at beregne centroid (tyngdepunkt), FWHM og Q. <b>Klik</b> sætter en punkt-markør som hidtil.</div>
   </div>
 </div>
 
@@ -732,6 +761,7 @@ let audioCtx = null;
 let micStream = null;
 let micSource = null;
 let micGainNode = null;
+let highpassNode = null;
 let analyser = null;
 let micDeviceId = null;  // null = default
 let timeData = null;
@@ -743,10 +773,17 @@ let maxFreq = 5000;
 let timeWindow = 0.05;
 let yScale = 'auto';
 let fftScale = 'linear';
+let fftYMax = null;  // null = auto-rescale, ellers fast loft
 let fftSmoothing = 0.5;
 let sweepMode = 'peak';
 let sweepRecording = false;
 let prevSmoothing = null;
+
+// Højpas-filter: hjælper mod lavfrekvent støj (trafik, håndteringsstøj,
+// mikrofonens DC-drift). Default fra; cutoff 150 Hz er fornuftig
+// start-værdi der ikke generer mellemtoner.
+let highpassOn = false;
+let highpassCutoff = 150;
 
 let peakSpectrum = null;
 let currentSpectrum = null;
@@ -766,6 +803,21 @@ let fftMarkerHz = null;
 let fftHoverHz = null;
 let sweepMarkerHz = null;
 let sweepHoverHz = null;
+// Sweep centroid-værktøj: træk for at vælge interval [centroidA, centroidB].
+// Når både er sat, beregnes centroid, FWHM og Q over intervallet.
+let sweepCentroidA = null;
+let sweepCentroidB = null;
+let sweepDragStartHz = null;   // Hz hvor mus-træk startede (på sweep-canvas)
+let sweepDragCurHz = null;     // aktuel mus-position under træk
+let sweepDragActive = false;   // sand når der trækkes (ikke bare klik)
+// Floor-subtraktion: når sand, beregnes en glidende baggrund og trækkes
+// fra visningen (selve dataene ændres ikke).
+let sweepFloorSubtract = false;
+// Sweep y-akse: 'linear' eller 'db'. dB er relativ til globalt maks i visningen,
+// så toppen altid ligger ved 0 dB - mere brugbart end absolutte dB ved
+// små FFT-amplituder (10⁻⁵). Default lineær for at bevare tidligere adfærd.
+let sweepYScale = 'linear';
+let sweepYMax = null;  // null = auto-rescale; ellers fast loft (lineær amplitude eller dB)
 
 // FFT-graf: zoom, akse-type, top-detektion
 let fftAxisType = 'lin';       // 'lin' eller 'log'
@@ -911,11 +963,15 @@ function saveProject() {
       fftZoomMin, fftZoomMax, fftPeakDetect, fftPeakCount,
       timeWindow, yScale, sweepMode,
       timeZoomStart, timeZoomSpan,
+      highpassOn, highpassCutoff,
+      sweepFloorSubtract,
+      sweepYScale, sweepYMax,
       activeTab
     },
     markers: {
       timeMarker1, timeMarker2,
-      fftMarkerHz, sweepMarkerHz
+      fftMarkerHz, sweepMarkerHz,
+      sweepCentroidA, sweepCentroidB
     },
     generators: {
       g1: { mode: gens[1].mode,
@@ -1011,6 +1067,17 @@ function applyProjectState(state) {
     document.getElementById('fftSmoothVal').textContent = s.fftSmoothing.toFixed(2).replace('.', ',');
     if (analyser) analyser.smoothingTimeConstant = s.fftSmoothing;
   }
+  // Højpas-filter
+  if (typeof s.highpassOn === 'boolean') {
+    highpassOn = s.highpassOn;
+    document.getElementById('highpassChk').checked = highpassOn;
+    document.getElementById('highpassCutoff').disabled = !highpassOn;
+  }
+  if (typeof s.highpassCutoff === 'number') {
+    highpassCutoff = s.highpassCutoff;
+    document.getElementById('highpassCutoff').value = String(highpassCutoff);
+  }
+  applyHighpassToNode();
   if (s.fftAxisType) {
     fftAxisType = s.fftAxisType;
     document.getElementById('fftAxisSel').value = s.fftAxisType;
@@ -1036,6 +1103,21 @@ function applyProjectState(state) {
     sweepMode = s.sweepMode;
     document.getElementById('sweepModeSel').value = s.sweepMode;
   }
+  if (typeof s.sweepFloorSubtract === 'boolean') {
+    sweepFloorSubtract = s.sweepFloorSubtract;
+    document.getElementById('sweepFloorChk').checked = sweepFloorSubtract;
+  }
+  if (s.sweepYScale) {
+    sweepYScale = s.sweepYScale;
+    document.getElementById('sweepScaleSel').value = s.sweepYScale;
+  }
+  if (typeof s.sweepYMax === 'number') {
+    sweepYMax = s.sweepYMax;
+    document.getElementById('sweepYMaxInput').value = String(s.sweepYMax);
+  } else if (s.sweepYMax === null) {
+    sweepYMax = null;
+    document.getElementById('sweepYMaxInput').value = '';
+  }
   timeZoomStart = s.timeZoomStart || 0;
   timeZoomSpan = s.timeZoomSpan;
   // Markører
@@ -1044,6 +1126,10 @@ function applyProjectState(state) {
     timeMarker2 = state.markers.timeMarker2;
     fftMarkerHz = state.markers.fftMarkerHz;
     sweepMarkerHz = state.markers.sweepMarkerHz;
+    sweepCentroidA = state.markers.sweepCentroidA != null ? state.markers.sweepCentroidA : null;
+    sweepCentroidB = state.markers.sweepCentroidB != null ? state.markers.sweepCentroidB : null;
+    document.getElementById('centroidClearBtn').style.display =
+      (sweepCentroidA != null && sweepCentroidB != null) ? '' : 'none';
   }
   // Generatorer (kun indstillinger - vi starter dem ikke automatisk)
   if (state.generators) {
@@ -1138,11 +1224,19 @@ async function startMic() {
     // Gain-node til at justere "følsomhed" digitalt
     micGainNode = audioCtx.createGain();
     micGainNode.gain.value = getCurrentMicGain();
+    // Højpas-filter: i kæden hele tiden, men styres af `highpassOn`.
+    // Når slået fra, sættes cutoff meget lavt (1 Hz) så den reelt er
+    // gennemsigtig. Q=0.707 (Butterworth) for fladt pasbånd.
+    highpassNode = audioCtx.createBiquadFilter();
+    highpassNode.type = 'highpass';
+    highpassNode.frequency.value = highpassOn ? highpassCutoff : 1;
+    highpassNode.Q.value = 0.707;
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = fftSize;
     analyser.smoothingTimeConstant = fftSmoothing;
     micSource.connect(micGainNode);
-    micGainNode.connect(analyser);
+    micGainNode.connect(highpassNode);
+    highpassNode.connect(analyser);
 
     // Mikrofonen kører nu - eventuelle indlæste data overskrives og
     // loadedSampleRate er ikke længere relevant
@@ -1194,14 +1288,35 @@ function onMicGainInput() {
   }
 }
 
+function onHighpassToggle() {
+  highpassOn = document.getElementById('highpassChk').checked;
+  document.getElementById('highpassCutoff').disabled = !highpassOn;
+  applyHighpassToNode();
+}
+
+function onHighpassCutoffChange() {
+  const v = parseFloat(document.getElementById('highpassCutoff').value);
+  if (!isFinite(v) || v < 20) {
+    // Ugyldig - sæt tilbage til sidste gyldige værdi
+    document.getElementById('highpassCutoff').value = String(highpassCutoff);
+    return;
+  }
+  highpassCutoff = v;
+  if (highpassOn) applyHighpassToNode();
+}
+
+function applyHighpassToNode() {
+  if (!highpassNode || !audioCtx) return;
+  // Når slået fra: sæt cutoff til 1 Hz (filteret er reelt gennemsigtigt).
+  // Vi rekonfigurerer i stedet for at re-route grafen — billigere og uden afbrydelse.
+  const target = highpassOn ? highpassCutoff : 1;
+  highpassNode.frequency.setValueAtTime(target, audioCtx.currentTime);
+}
+
 async function refreshMicDeviceList() {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const mics = devices.filter(d => d.kind === 'audioinput');
-    if (mics.length <= 1) {
-      document.getElementById('micDeviceGroup').style.display = 'none';
-      return;
-    }
     const sel = document.getElementById('micDeviceSel');
     sel.innerHTML = '';
     // "Default" option
@@ -1212,12 +1327,16 @@ async function refreshMicDeviceList() {
     for (const d of mics) {
       const opt = document.createElement('option');
       opt.value = d.deviceId;
-      // Mikrofon-navnet er ofte længere end vi vil vise
       opt.textContent = d.label || ('Mikrofon ' + d.deviceId.slice(0, 6));
       if (d.deviceId === micDeviceId) opt.selected = true;
       sel.appendChild(opt);
     }
-    document.getElementById('micDeviceGroup').style.display = 'flex';
+    // Vis altid hvis vi har enhedsnavne (dvs. permission er givet)
+    // — så brugeren kan trykke opdater-knappen for at lede efter nye enheder
+    const hasLabels = mics.some(d => d.label);
+    if (hasLabels) {
+      document.getElementById('micDeviceGroup').style.display = 'flex';
+    }
   } catch (e) {
     // enumerateDevices kan fejle - ikke kritisk
   }
@@ -1244,11 +1363,14 @@ function stopMic() {
   }
   if (micSource) { micSource.disconnect(); micSource = null; }
   if (micGainNode) { micGainNode.disconnect(); micGainNode = null; }
+  if (highpassNode) { highpassNode.disconnect(); highpassNode = null; }
   analyser = null;
   document.getElementById('micBtn').textContent = 'Start mikrofon';
   document.getElementById('micBtn').classList.add('primary');
   document.getElementById('micStatus').className = 'status';
   document.getElementById('micLabel').textContent = 'Mikrofon ikke aktiv';
+  // Re-tegn så det sidste spektrum/sweep auto-rescaler til den valgte data
+  draw();
 }
 
 // ===== Tonegenerator (to uafhængige) =====
@@ -1309,6 +1431,11 @@ async function startGen(id) {
       }
       g.osc.start();
       setTimeout(() => { if (g.isOn) stopGen(id); }, dur * 1000 + 50);
+      // Stop sweep-måling automatisk 500ms efter sweepet er færdigt, så
+      // spektret fryser uden risiko for at uønskede toner kommer med
+      setTimeout(() => {
+        if (sweepRecording) stopSweepRecord();
+      }, dur * 1000 + 500);
       setTab('sweep');
     }
 
@@ -1421,6 +1548,29 @@ function onFftScaleChange() {
   fftScale = document.getElementById('fftScaleSel').value;
 }
 
+function onFftYMaxInput() {
+  const txt = document.getElementById('fftYMax').value.trim().replace(',', '.');
+  if (txt === '') {
+    fftYMax = null;
+  } else {
+    const v = parseFloat(txt);
+    if (!isNaN(v) && v > 0) fftYMax = v;
+    else fftYMax = null;
+  }
+  draw();
+}
+
+function setFftYMax(v) {
+  if (v === 0 || v == null) {
+    fftYMax = null;
+    document.getElementById('fftYMax').value = '';
+  } else {
+    fftYMax = v;
+    document.getElementById('fftYMax').value = String(v);
+  }
+  draw();
+}
+
 function onFftSmoothInput() {
   const v = parseInt(document.getElementById('fftSmooth').value, 10) / 100;
   fftSmoothing = v;
@@ -1433,6 +1583,45 @@ function onFftSmoothInput() {
 
 function onSweepModeChange() {
   sweepMode = document.getElementById('sweepModeSel').value;
+}
+
+function onSweepScaleChange() {
+  sweepYScale = document.getElementById('sweepScaleSel').value;
+  // Y-maks-tolkning er forskellig på de to skalaer (amplitude vs. dB),
+  // så nulstil til auto når man skifter skala for at undgå forvirring.
+  sweepYMax = null;
+  document.getElementById('sweepYMaxInput').value = '';
+  draw();
+}
+
+function onSweepYMaxInput() {
+  const txt = document.getElementById('sweepYMaxInput').value.trim().replace(',', '.');
+  if (txt === '') {
+    sweepYMax = null;
+  } else {
+    const v = parseFloat(txt);
+    // Lineær: kun positive værdier giver mening. dB: typisk 0 eller negativ
+    // (relativt til maks), men vi tillader hele rækken.
+    if (!isNaN(v)) {
+      if (sweepYScale === 'linear' && v > 0) sweepYMax = v;
+      else if (sweepYScale === 'db') sweepYMax = v;
+      else sweepYMax = null;
+    } else {
+      sweepYMax = null;
+    }
+  }
+  draw();
+}
+
+function setSweepYMax(v) {
+  if (v === 0 || v == null) {
+    sweepYMax = null;
+    document.getElementById('sweepYMaxInput').value = '';
+  } else {
+    sweepYMax = v;
+    document.getElementById('sweepYMaxInput').value = String(v);
+  }
+  draw();
 }
 
 function clearSweep() {
@@ -1819,6 +2008,24 @@ function getEffectiveSampleRate() {
   return 48000;
 }
 
+// Formattér en y-værdi med passende antal decimaler (eller videnskabelig notation)
+// så små værdier som 0,0003 ikke vises som "0,000".
+function formatYValue(v) {
+  if (v === 0) return '0';
+  const abs = Math.abs(v);
+  if (abs >= 1) return v.toFixed(2).replace('.', ',');
+  if (abs >= 0.1) return v.toFixed(3).replace('.', ',');
+  if (abs >= 0.01) return v.toFixed(4).replace('.', ',');
+  if (abs >= 0.001) return v.toFixed(5).replace('.', ',');
+  // For meget små værdier, brug videnskabelig notation (fx 3,2·10⁻⁴)
+  const exp = Math.floor(Math.log10(abs));
+  const mantissa = v / Math.pow(10, exp);
+  const supDigits = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+                      '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+  const expStr = String(exp).split('').map(c => supDigits[c] || c).join('');
+  return mantissa.toFixed(1).replace('.', ',') + '·10' + expStr;
+}
+
 // ===== Frekvens-akse hjælpefunktioner =====
 // Returnerer det aktuelle Hz-interval på FFT-x-aksen
 function getFftViewRange() {
@@ -1893,11 +2100,19 @@ function drawFft() {
   if (fftScale === 'db') {
     ymin = -90; ymax = -10;
   } else {
-    let m = 0.001;
-    for (let i = startBin; i < endBin; i++) {
-      if (freqData[i] > m) m = freqData[i];
+    if (fftYMax != null) {
+      // Manuel Y-maks
+      ymax = fftYMax;
+    } else {
+      // Auto-rescale
+      let m = 0;
+      for (let i = startBin; i < endBin; i++) {
+        if (freqData[i] > m) m = freqData[i];
+      }
+      if (m < 1e-6) m = 1e-3;
+      ymax = m * 1.15;
     }
-    ymax = m * 1.15; ymin = 0;
+    ymin = 0;
   }
 
   // Frekvens-akse: gitter og x-labels
@@ -1918,7 +2133,7 @@ function drawFft() {
     for (let k = 0; k <= 4; k++) {
       const v = ymin + (ymax - ymin) * k / 4;
       const y = padT + plotH * (1 - k / 4);
-      ctx.fillText(v.toFixed(3).replace('.', ','), padL - 6, y + 3);
+      ctx.fillText(formatYValue(v), padL - 6, y + 3);
       ctx.strokeStyle = grid; ctx.beginPath();
       ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
     }
@@ -2066,6 +2281,98 @@ function drawPeakLabels(ctx, peaks, padL, padT, plotW, plotH, fmin, fmax, ymin, 
   }
 }
 
+// ===== Sweep-analyse: floor og centroid =====
+
+// Estimér en glidende baggrund (floor) i et spektrum. Vi bruger en lavpercentil
+// (15. percentil) i et bevægeligt vindue, hvilket fjerner toppe men bevarer
+// generel baggrundsstøj og bredbåndet direkte-lyd.
+// Returnerer Float32Array i samme længde som data (kun udfyldt op til maxBin).
+function estimateFloor(data, maxBin, windowBins) {
+  if (!data || data.length === 0) return null;
+  const N = Math.min(data.length, maxBin);
+  const out = new Float32Array(N);
+  // Brug halvbåndsvinduer for at få en glidende baggrund. Hvis vinduet er for lille,
+  // følger floor selve toppene; hvis for stort, bliver det for grov.
+  const half = Math.max(3, Math.floor(windowBins / 2));
+  // For effektivitet: vi sorterer i et roterende vindue. Med ~300 bins og halv-vindue 30
+  // bliver det ~30k operationer — fint i RAF-loopet.
+  const buf = [];
+  for (let i = 0; i < N; i++) {
+    const lo = Math.max(0, i - half);
+    const hi = Math.min(N - 1, i + half);
+    buf.length = 0;
+    for (let j = lo; j <= hi; j++) buf.push(data[j]);
+    buf.sort((a, b) => a - b);
+    // 15. percentil
+    const idx = Math.floor(buf.length * 0.15);
+    out[i] = buf[idx];
+  }
+  return out;
+}
+
+// Beregner spektralt tyngdepunkt (centroid), FWHM og Q over et frekvensinterval.
+// data: amplitude-array (lineær). Vi bruger amplitude (ikke effekt) som vægt,
+// hvilket er den mest udbredte definition i akustik.
+// Returnerer { centroid, fwhm, q, peakHz, peakVal, sumA } eller null hvis intet brugbart data.
+function computeCentroid(data, binHz, fA, fB, floor) {
+  if (!data) return null;
+  const f1 = Math.min(fA, fB);
+  const f2 = Math.max(fA, fB);
+  const i1 = Math.max(0, Math.floor(f1 / binHz));
+  const i2 = Math.min(data.length - 1, Math.ceil(f2 / binHz));
+  if (i2 <= i1) return null;
+  let sumWf = 0, sumW = 0;
+  let peakVal = -Infinity, peakIdx = i1;
+  for (let i = i1; i <= i2; i++) {
+    let a = data[i];
+    if (floor) a -= floor[i];
+    if (a < 0) a = 0;
+    if (a > peakVal) { peakVal = a; peakIdx = i; }
+    const f = i * binHz;
+    sumWf += f * a;
+    sumW += a;
+  }
+  if (sumW <= 0) return null;
+  const centroid = sumWf / sumW;
+  // FWHM: find venstre og højre punkt hvor amplituden falder under peakVal/2 (relativt til
+  // floor-niveauet hvis vi har trukket fra). Vi leder ud fra peak-bin'en.
+  const halfMax = peakVal / 2;
+  let leftHz = null, rightHz = null;
+  // Venstre
+  for (let i = peakIdx; i >= i1; i--) {
+    let a = data[i];
+    if (floor) a -= floor[i];
+    if (a < 0) a = 0;
+    if (a < halfMax) {
+      // Lineær interpolation mellem i og i+1
+      let aPrev = data[i + 1];
+      if (floor && (i + 1) < floor.length) aPrev -= floor[i + 1];
+      if (aPrev < 0) aPrev = 0;
+      const t = aPrev > a ? (halfMax - a) / (aPrev - a) : 0;
+      leftHz = (i + t) * binHz;
+      break;
+    }
+  }
+  // Højre
+  for (let i = peakIdx; i <= i2; i++) {
+    let a = data[i];
+    if (floor) a -= floor[i];
+    if (a < 0) a = 0;
+    if (a < halfMax) {
+      let aPrev = data[i - 1];
+      if (floor && (i - 1) >= 0) aPrev -= floor[i - 1];
+      if (aPrev < 0) aPrev = 0;
+      const t = aPrev > a ? (halfMax - a) / (aPrev - a) : 0;
+      rightHz = (i - t) * binHz;
+      break;
+    }
+  }
+  const fwhm = (leftHz != null && rightHz != null) ? (rightHz - leftHz) : null;
+  const peakHz = peakIdx * binHz;
+  const q = (fwhm != null && fwhm > 0) ? centroid / fwhm : null;
+  return { centroid, fwhm, q, peakHz, peakVal, sumA: sumW, i1, i2 };
+}
+
 function drawSweep() {
   const c = document.getElementById('sweepCanvas');
   const ctx = c.getContext('2d');
@@ -2105,59 +2412,142 @@ function drawSweep() {
 
   const showData = sweepMode === 'peak' ? peakSpectrum : currentSpectrum;
 
-  let ymax = 0.001;
-  if (showData) {
-    for (let i = 0; i < Math.min(maxBin, showData.length); i++) {
-      if (showData[i] > ymax) ymax = showData[i];
+  // Floor-estimering hvis aktiveret. Vinduesbredde: ~5% af synlige bins,
+  // mindst 11 bins (så det dækker en sweep-top der typisk har bredde 5-30 bins).
+  let floor = null;
+  if (sweepFloorSubtract && showData) {
+    const windowBins = Math.max(11, Math.floor(maxBin * 0.05));
+    floor = estimateFloor(showData, maxBin, windowBins);
+  }
+  // Data der bruges til tegning: subtraktion er kun visuel - selve showData ændres ikke
+  const drawData = floor && showData
+    ? (() => {
+        const d = new Float32Array(showData.length);
+        for (let i = 0; i < showData.length; i++) {
+          d[i] = i < floor.length ? Math.max(0, showData[i] - floor[i]) : showData[i];
+        }
+        return d;
+      })()
+    : showData;
+
+  // ---- Y-skala-bestemmelse ----
+  // Vi finder først den globale maks-amplitude i den synlige del. Den bruges
+  // dels til lineær auto-rescale, dels som referenceniveau (0 dB) i dB-modus.
+  let amax = 0;
+  if (drawData) {
+    for (let i = 0; i < Math.min(maxBin, drawData.length); i++) {
+      if (drawData[i] > amax) amax = drawData[i];
     }
   }
-  ymax *= 1.15;
-  const ymin = 0;
+  if (amax < 1e-9) amax = 1e-3;  // undgå log(0) - kunstigt loft hvis intet signal
+  const dbRef = amax;  // 0 dB = global maks
+
+  let ymin, ymax;
+  if (sweepYScale === 'db') {
+    // dB-modus: relativ til global maks. Default -60 dB til 0 dB.
+    // Brugerens manuelle Y-maks tolkes som dB-værdi.
+    ymax = (sweepYMax != null) ? sweepYMax : 0;
+    ymin = ymax - 60;
+  } else {
+    // Lineær: 0 til ymax*1.15 (eller manuel)
+    ymax = (sweepYMax != null) ? sweepYMax : amax * 1.15;
+    ymin = 0;
+  }
+
+  // Helper: konvertér amplitude-værdi til pixel-y. Bruges af alle tegne-løkker.
+  function valToY(v) {
+    let display;
+    if (sweepYScale === 'db') {
+      // Hvis amplituden er ~0, sæt den langt under ymin (så grafen går til bunden)
+      display = v > 0 ? 20 * Math.log10(v / dbRef) : ymin - 100;
+    } else {
+      display = v;
+    }
+    let y = padT + plotH * (1 - (display - ymin) / (ymax - ymin));
+    return Math.max(padT, Math.min(padT + plotH, y));
+  }
 
   // Sweep bruger altid lineær akse fra 0 til maxFreq (uafhængigt af FFT-fanens zoom)
   // Vi midlertidigt deaktiverer log-akse her ved at gemme/genskabe tilstanden
   const savedAxisType = fftAxisType;
   fftAxisType = 'lin';
   drawFreqAxis(ctx, padL, padT, plotW, plotH, grid, text, muted, 0, maxFreq);
-  // Y-akse
+  // Y-akse labels
   ctx.fillStyle = muted;
   ctx.font = '11px Helvetica, Arial, sans-serif';
   ctx.textAlign = 'right';
-  for (let k = 0; k <= 4; k++) {
-    const v = ymin + (ymax - ymin) * k / 4;
-    const y = padT + plotH * (1 - k / 4);
-    ctx.fillText(v.toFixed(3).replace('.', ','), padL - 6, y + 3);
-    ctx.strokeStyle = grid; ctx.beginPath();
-    ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+  if (sweepYScale === 'db') {
+    // dB-aksen: del op i pæne 10 dB-trin der dækker [ymin, ymax]
+    const step = 10;
+    const first = Math.ceil(ymin / step) * step;
+    for (let v = first; v <= ymax; v += step) {
+      const y = padT + plotH * (1 - (v - ymin) / (ymax - ymin));
+      ctx.fillText(v + ' dB', padL - 6, y + 3);
+      ctx.strokeStyle = grid; ctx.beginPath();
+      ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+    }
+  } else {
+    for (let k = 0; k <= 4; k++) {
+      const v = ymin + (ymax - ymin) * k / 4;
+      const y = padT + plotH * (1 - k / 4);
+      ctx.fillText(formatYValue(v), padL - 6, y + 3);
+      ctx.strokeStyle = grid; ctx.beginPath();
+      ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+    }
   }
 
-  if (showData) {
+  // Tegn evt. centroid-region som lysere udfyldt rektangel før selve kurven,
+  // så kurven ses ovenpå
+  let regionFA = null, regionFB = null;
+  if (sweepDragActive && sweepDragStartHz != null && sweepDragCurHz != null) {
+    regionFA = sweepDragStartHz;
+    regionFB = sweepDragCurHz;
+  } else if (sweepCentroidA != null && sweepCentroidB != null) {
+    regionFA = sweepCentroidA;
+    regionFB = sweepCentroidB;
+  }
+  if (regionFA != null && regionFB != null) {
+    const f1 = Math.min(regionFA, regionFB);
+    const f2 = Math.max(regionFA, regionFB);
+    const x1 = padL + (Math.max(0, f1) / maxFreq) * plotW;
+    const x2 = padL + (Math.min(maxFreq, f2) / maxFreq) * plotW;
+    ctx.fillStyle = brown + '22';
+    ctx.fillRect(x1, padT, x2 - x1, plotH);
+    // Kantlinjer
+    ctx.strokeStyle = brown + '99';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x1, padT); ctx.lineTo(x1, padT + plotH);
+    ctx.moveTo(x2, padT); ctx.lineTo(x2, padT + plotH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  if (drawData) {
     const drawColor = sweepMode === 'peak' ? green : blue;
     ctx.strokeStyle = drawColor;
     ctx.fillStyle = drawColor + '33';
     ctx.lineWidth = 1.5;
+    const baseY = padT + plotH;  // bunden af plotområdet
     ctx.beginPath();
     let started = false;
-    for (let i = 0; i < Math.min(maxBin, showData.length); i++) {
+    for (let i = 0; i < Math.min(maxBin, drawData.length); i++) {
       const hz = i * binHz;
       const x = padL + (hz / maxFreq) * plotW;
-      const v = showData[i];
-      let y = padT + plotH * (1 - (v - ymin) / (ymax - ymin));
-      y = Math.max(padT, Math.min(padT + plotH, y));
-      if (!started) { ctx.moveTo(x, padT + plotH); ctx.lineTo(x, y); started = true; }
+      const y = valToY(drawData[i]);
+      if (!started) { ctx.moveTo(x, baseY); ctx.lineTo(x, y); started = true; }
       else ctx.lineTo(x, y);
     }
-    ctx.lineTo(padL + plotW, padT + plotH);
+    ctx.lineTo(padL + plotW, baseY);
     ctx.closePath();
     ctx.fill();
     ctx.beginPath();
     started = false;
-    for (let i = 0; i < Math.min(maxBin, showData.length); i++) {
+    for (let i = 0; i < Math.min(maxBin, drawData.length); i++) {
       const hz = i * binHz;
       const x = padL + (hz / maxFreq) * plotW;
-      const v = showData[i];
-      let y = padT + plotH * (1 - (v - ymin) / (ymax - ymin));
-      y = Math.max(padT, Math.min(padT + plotH, y));
+      const y = valToY(drawData[i]);
       if (!started) { ctx.moveTo(x, y); started = true; }
       else ctx.lineTo(x, y);
     }
@@ -2165,7 +2555,42 @@ function drawSweep() {
   }
 
   drawMarkerOnFft(ctx, padL, padT, plotW, plotH, brown, muted, text,
-    sweepMarkerHz, sweepHoverHz, binHz, ymin, ymax, 0, maxFreq, showData);
+    sweepMarkerHz, sweepHoverHz, binHz, ymin, ymax, 0, maxFreq, drawData, valToY);
+
+  // Tegn centroid-resultat hvis valgt et område
+  if (sweepCentroidA != null && sweepCentroidB != null && drawData) {
+    // Beregn på de viste data (efter evt. floor-subtraktion)
+    const cres = computeCentroid(drawData, binHz, sweepCentroidA, sweepCentroidB, null);
+    if (cres) {
+      const cx = padL + (cres.centroid / maxFreq) * plotW;
+      // Lodret linje ved centroid
+      ctx.strokeStyle = brown;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, padT);
+      ctx.lineTo(cx, padT + plotH);
+      ctx.stroke();
+      // Lille trekant ved bunden
+      ctx.fillStyle = brown;
+      ctx.beginPath();
+      ctx.moveTo(cx - 5, padT + plotH);
+      ctx.lineTo(cx + 5, padT + plotH);
+      ctx.lineTo(cx, padT + plotH - 7);
+      ctx.closePath();
+      ctx.fill();
+      // Label med centroid-værdi
+      const lab = 'f_c = ' + cres.centroid.toFixed(1).replace('.', ',') + ' Hz';
+      ctx.font = 'bold 12px Helvetica, Arial, sans-serif';
+      ctx.textAlign = 'center';
+      const tw = ctx.measureText(lab).width;
+      // Læg label oven for plot, så den ikke skjuler kurven
+      const labY = padT + 12;
+      ctx.fillStyle = bg + 'dd';
+      ctx.fillRect(cx - tw / 2 - 4, labY - 11, tw + 8, 15);
+      ctx.fillStyle = brown;
+      ctx.fillText(lab, cx, labY);
+    }
+  }
   // Genskab axe-type til FFT-fanen
   fftAxisType = savedAxisType;
 
@@ -2217,7 +2642,7 @@ function drawSweep() {
   ctx.save();
   ctx.translate(14, padT + plotH / 2);
   ctx.rotate(-Math.PI / 2);
-  ctx.fillText('Amplitude (maks)', 0, 0);
+  ctx.fillText(sweepYScale === 'db' ? 'Niveau (dB rel. maks)' : 'Amplitude (maks)', 0, 0);
   ctx.restore();
 }
 
@@ -2303,7 +2728,7 @@ function drawAxes(ctx, padL, padT, plotW, plotH, grid, text, muted, x0, x1, y0, 
 }
 
 function drawMarkerOnFft(ctx, padL, padT, plotW, plotH, brown, muted, text,
-                          markerHz, hoverHz, binHz, ymin, ymax, fmin, fmax, dataOverride) {
+                          markerHz, hoverHz, binHz, ymin, ymax, fmin, fmax, dataOverride, valToYOverride) {
   const data = dataOverride || freqData;
 
   function drawLine(hz, dashed, color, labelInfo) {
@@ -2327,7 +2752,10 @@ function drawMarkerOnFft(ctx, padL, padT, plotW, plotH, brown, muted, text,
       if (bin >= 0 && bin < data.length) {
         const v = data[bin];
         let y;
-        if (fftScale === 'db' && data === freqData) {
+        if (valToYOverride) {
+          // Brug den angivne konverter (fx sweep i dB-mode på lineær data)
+          y = valToYOverride(v);
+        } else if (fftScale === 'db' && data === freqData) {
           // Vi tegner FFT i dB-mode; brug dB-data
           const vdb = freqDataDb[bin];
           y = padT + plotH * (1 - (vdb - ymin) / (ymax - ymin));
@@ -2566,36 +2994,173 @@ function updateFftInfo() {
     '  ·  ' + ampD.toFixed(1).replace('.', ',') + ' dB';
 }
 
-function onSweepClick(e) {
-  const hz = canvasToHz('sweepCanvas', e);
-  if (hz != null) { sweepMarkerHz = hz; updateSweepInfo(); draw(); }
+function onSweepMouseDown(e) {
+  // Højreklik håndteres separat (oncontextmenu); kun venstre knap (button=0) starter drag
+  if (e.button !== 0) return;
+  const hz = canvasToHzSweep(e);
+  if (hz == null) return;
+  sweepDragStartHz = hz;
+  sweepDragCurHz = hz;
+  sweepDragActive = false;  // bliver true når musen flytter sig nok
 }
-function onSweepHover(e) {
-  const hz = canvasToHz('sweepCanvas', e);
+
+function onSweepMouseMove(e) {
+  const hz = canvasToHzSweep(e);
   sweepHoverHz = hz;
+  if (sweepDragStartHz != null && hz != null) {
+    sweepDragCurHz = hz;
+    // Aktivér drag når brugeren har flyttet sig mere end ~5px (svarende til en
+    // tærskel i Hz baseret på den aktuelle maxFreq og canvas-bredde)
+    const c = document.getElementById('sweepCanvas');
+    const plotW = c.clientWidth - 55 - 12;
+    const hzPerPx = maxFreq / plotW;
+    if (Math.abs(hz - sweepDragStartHz) > 5 * hzPerPx) {
+      sweepDragActive = true;
+    }
+  }
   updateSweepInfo();
   draw();
 }
-function onSweepLeave() { sweepHoverHz = null; updateSweepInfo(); draw(); }
+
+function onSweepMouseUp(e) {
+  if (e.button !== 0) return;
+  const hz = canvasToHzSweep(e);
+  if (sweepDragStartHz != null && sweepDragActive && hz != null) {
+    // Drag afsluttet: sæt centroid-region
+    sweepCentroidA = Math.min(sweepDragStartHz, hz);
+    sweepCentroidB = Math.max(sweepDragStartHz, hz);
+    document.getElementById('centroidClearBtn').style.display = '';
+  } else if (sweepDragStartHz != null && !sweepDragActive && hz != null) {
+    // Almindeligt klik: sæt punkt-markør (eksisterende adfærd)
+    sweepMarkerHz = hz;
+  }
+  sweepDragStartHz = null;
+  sweepDragCurHz = null;
+  sweepDragActive = false;
+  updateSweepInfo();
+  draw();
+}
+
+function onSweepMouseLeave(e) {
+  // Annullér drag hvis musen forlader canvas midt i et træk
+  sweepDragStartHz = null;
+  sweepDragCurHz = null;
+  sweepDragActive = false;
+  sweepHoverHz = null;
+  updateSweepInfo();
+  draw();
+}
+
+function onSweepContextMenu(e) {
+  e.preventDefault();
+  // Højreklik fjerner centroid-region hvis den er der; ellers fjerner punkt-markør
+  if (sweepCentroidA != null || sweepCentroidB != null) {
+    clearCentroidRegion();
+  } else {
+    sweepMarkerHz = null;
+    updateSweepInfo();
+    draw();
+  }
+}
+
+function clearCentroidRegion() {
+  sweepCentroidA = null;
+  sweepCentroidB = null;
+  document.getElementById('centroidClearBtn').style.display = 'none';
+  updateSweepInfo();
+  draw();
+}
+
+function onSweepFloorToggle() {
+  sweepFloorSubtract = document.getElementById('sweepFloorChk').checked;
+  draw();
+}
 
 function updateSweepInfo() {
   const info = document.getElementById('sweepInfo');
-  const hz = sweepHoverHz != null ? sweepHoverHz : sweepMarkerHz;
   const data = sweepMode === 'peak' ? peakSpectrum : currentSpectrum;
-  if (hz == null || !data || (!audioCtx && !loadedSampleRate)) {
-    info.textContent = 'Klik for at måle en frekvens';
+  if (!data || (!audioCtx && !loadedSampleRate)) {
+    info.textContent = 'Træk hen over en top for centroid, eller klik for at måle en frekvens';
     return;
   }
   const sr = getEffectiveSampleRate();
   const binHz = (sr / 2) / data.length;
+
+  // Hvis der trækkes lige nu: vis live preview af centroid
+  if (sweepDragActive && sweepDragStartHz != null && sweepDragCurHz != null) {
+    const f1 = Math.min(sweepDragStartHz, sweepDragCurHz);
+    const f2 = Math.max(sweepDragStartHz, sweepDragCurHz);
+    // Beregn på de samme data som tegnes (med evt. floor-subtraktion)
+    const drawData = getSweepDrawData(data, binHz);
+    const cres = computeCentroid(drawData, binHz, f1, f2, null);
+    if (cres) {
+      info.textContent = formatCentroidInfo(cres, f1, f2);
+      return;
+    }
+  }
+  // Hvis centroid-region er sat: vis dens resultat
+  if (sweepCentroidA != null && sweepCentroidB != null) {
+    const drawData = getSweepDrawData(data, binHz);
+    const cres = computeCentroid(drawData, binHz, sweepCentroidA, sweepCentroidB, null);
+    if (cres) {
+      info.textContent = formatCentroidInfo(cres, sweepCentroidA, sweepCentroidB);
+      return;
+    }
+  }
+  // Ellers: hover/markør-info som før
+  const hz = sweepHoverHz != null ? sweepHoverHz : sweepMarkerHz;
+  if (hz == null) {
+    info.textContent = 'Træk hen over en top for centroid, eller klik for at måle en frekvens';
+    return;
+  }
   const bin = Math.round(hz / binHz);
   if (bin < 0 || bin >= data.length) {
     info.textContent = '—';
     return;
   }
   const prefix = sweepHoverHz != null && sweepHoverHz !== sweepMarkerHz ? 'Hover: ' : 'Markør: ';
-  info.textContent = prefix + hz.toFixed(1).replace('.', ',') + ' Hz' +
-    '  ·  amplitude ' + data[bin].toFixed(4).replace('.', ',');
+  // Hvis y-aksen er dB, vis også dB-værdi relativt til global maks i visningen
+  let extra = 'amplitude ' + data[bin].toFixed(4).replace('.', ',');
+  if (sweepYScale === 'db') {
+    const drawData = getSweepDrawData(data, binHz);
+    // Find global maks (samme som drawSweep)
+    let amax = 0;
+    const maxBin = Math.min(drawData.length, Math.ceil(maxFreq / binHz));
+    for (let i = 0; i < maxBin; i++) if (drawData[i] > amax) amax = drawData[i];
+    if (amax > 0 && drawData[bin] > 0) {
+      const db = 20 * Math.log10(drawData[bin] / amax);
+      extra += '  ·  ' + db.toFixed(1).replace('.', ',') + ' dB';
+    }
+  }
+  info.textContent = prefix + hz.toFixed(1).replace('.', ',') + ' Hz  ·  ' + extra;
+}
+
+// Returnerer det amplitude-array der ligger på skærmen lige nu (med evt. floor-subtraktion).
+// Bruges af updateSweepInfo så centroid-tal stemmer overens med kurven brugeren ser.
+function getSweepDrawData(data, binHz) {
+  if (!sweepFloorSubtract) return data;
+  const maxBin = Math.min(data.length, Math.ceil(maxFreq / binHz));
+  const windowBins = Math.max(11, Math.floor(maxBin * 0.05));
+  const floor = estimateFloor(data, maxBin, windowBins);
+  if (!floor) return data;
+  const out = new Float32Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    out[i] = i < floor.length ? Math.max(0, data[i] - floor[i]) : data[i];
+  }
+  return out;
+}
+
+function formatCentroidInfo(cres, fA, fB) {
+  const f1 = Math.min(fA, fB), f2 = Math.max(fA, fB);
+  let s = 'f_c = ' + cres.centroid.toFixed(1).replace('.', ',') + ' Hz';
+  if (cres.fwhm != null) {
+    s += '  ·  FWHM = ' + cres.fwhm.toFixed(1).replace('.', ',') + ' Hz';
+  }
+  if (cres.q != null) {
+    s += '  ·  Q = ' + cres.q.toFixed(1).replace('.', ',');
+  }
+  s += '  ·  interval ' + f1.toFixed(0) + '–' + f2.toFixed(0) + ' Hz';
+  return s;
 }
 
 // ===== Tidssignal: klik, hover, zoom =====
