@@ -473,8 +473,8 @@ canvas {
     </div>
     <div class="control-group">
       <label>Følsomhed</label>
-      <input type="range" id="micGain" min="0" max="100" value="50" step="1" oninput="onMicGainInput()" style="width:120px">
-      <span class="value-display" id="micGainVal">1,0×</span>
+      <input type="range" id="micGain" min="0" max="100" value="20" step="1" oninput="onMicGainInput()" style="width:120px">
+      <span class="value-display" id="micGainVal">0,25×</span>
     </div>
     <div class="control-group" title="Fjerner lavfrekvent støj (trafikrumlen, håndteringsstøj, mikrofon-drift) før FFT">
       <label><input type="checkbox" id="highpassChk" onchange="onHighpassToggle()"> Højpas</label>
@@ -525,17 +525,17 @@ canvas {
       </div>
       <div class="gen-body" id="sweepGroup1" style="display:none">
         <label>Fra</label>
-        <input type="number" id="sweepFrom1" value="100" min="20" max="20000" style="width:70px">
+        <input type="number" id="sweepFrom1" value="200" min="20" max="20000" style="width:70px">
         <label>til</label>
-        <input type="number" id="sweepTo1" value="3000" min="20" max="20000" style="width:70px">
+        <input type="number" id="sweepTo1" value="3800" min="20" max="20000" style="width:70px">
         <label>Hz over</label>
-        <input type="number" id="sweepDur1" value="10" min="1" max="120" style="width:50px">
+        <input type="number" id="sweepDur1" value="60" min="1" max="600" style="width:50px">
         <span class="unit">s</span>
       </div>
       <div class="gen-body">
         <label>Lydstyrke</label>
-        <input type="range" id="genGain1" min="0" max="100" value="20" step="1" oninput="onGenGainInput(1)">
-        <span class="value-display" id="genGainVal1">20 %</span>
+        <input type="range" id="genGain1" min="0" max="100" value="100" step="1" oninput="onGenGainInput(1)">
+        <span class="value-display" id="genGainVal1">100 %</span>
         <button id="genBtn1" onclick="toggleGen(1)">Start</button>
       </div>
     </div>
@@ -558,17 +558,17 @@ canvas {
       </div>
       <div class="gen-body" id="sweepGroup2" style="display:none">
         <label>Fra</label>
-        <input type="number" id="sweepFrom2" value="100" min="20" max="20000" style="width:70px">
+        <input type="number" id="sweepFrom2" value="200" min="20" max="20000" style="width:70px">
         <label>til</label>
-        <input type="number" id="sweepTo2" value="3000" min="20" max="20000" style="width:70px">
+        <input type="number" id="sweepTo2" value="3800" min="20" max="20000" style="width:70px">
         <label>Hz over</label>
-        <input type="number" id="sweepDur2" value="10" min="1" max="120" style="width:50px">
+        <input type="number" id="sweepDur2" value="60" min="1" max="600" style="width:50px">
         <span class="unit">s</span>
       </div>
       <div class="gen-body">
         <label>Lydstyrke</label>
-        <input type="range" id="genGain2" min="0" max="100" value="20" step="1" oninput="onGenGainInput(2)">
-        <span class="value-display" id="genGainVal2">20 %</span>
+        <input type="range" id="genGain2" min="0" max="100" value="100" step="1" oninput="onGenGainInput(2)">
+        <span class="value-display" id="genGainVal2">100 %</span>
         <button id="genBtn2" onclick="toggleGen(2)">Start</button>
       </div>
     </div>
@@ -747,11 +747,23 @@ canvas {
       <div class="control-group" title="Estimer en baggrunds-støjgulv og træk den fra visningen. Selve dataene ændres ikke.">
         <label><input type="checkbox" id="sweepFloorChk" onchange="onSweepFloorToggle()"> Træk baggrund fra</label>
       </div>
+      <div class="control-group" title="Stop målingen automatisk efter et antal sekunder. Brugbart med ekstern lydkilde hvor du kender sweepets varighed.">
+        <label><input type="checkbox" id="sweepAutoStopChk" onchange="onSweepAutoStopToggle()"> Auto-stop efter</label>
+        <input type="number" id="sweepAutoStopSec" min="1" max="600" value="60" step="1" style="width:60px" disabled onchange="onSweepAutoStopChange()">
+        <span class="unit">s</span>
+      </div>
+      <div class="control-group" title="Akkumulér kun spektret indenfor det angivne frekvensområde. Fjerner artefakter ved sweep-start og -slut.">
+        <label><input type="checkbox" id="sweepRangeChk" onchange="onSweepRangeToggle()"> Begræns til</label>
+        <input type="number" id="sweepRangeFrom" min="0" max="48000" value="200" step="10" style="width:65px" disabled onchange="onSweepRangeChange()">
+        <span class="unit">–</span>
+        <input type="number" id="sweepRangeTo" min="0" max="48000" value="3800" step="10" style="width:65px" disabled onchange="onSweepRangeChange()">
+        <span class="unit">Hz</span>
+      </div>
       <div class="control-group">
         <button onclick="clearCentroidRegion()" id="centroidClearBtn" style="display:none">Ryd centroid-område</button>
       </div>
     </div>
-    <div class="help-text">Tryk "Start måling" lige før du starter sweepet — så slås FFT-udjævning fra og toppe fanges præcist. Tryk "Stop" når sweepet er færdigt. <b>Træk</b> hen over en top for at beregne centroid (tyngdepunkt), FWHM og Q. <b>Klik</b> sætter en punkt-markør som hidtil.</div>
+    <div class="help-text">Tryk "Start måling" lige før du starter sweepet — så slås FFT-udjævning fra og toppe fanges præcist. Tryk "Stop" når sweepet er færdigt (eller brug auto-stop). <b>Træk</b> hen over en top for at beregne centroid (tyngdepunkt), FWHM og Q. <b>Klik</b> sætter en punkt-markør som hidtil.</div>
   </div>
 </div>
 
@@ -777,7 +789,23 @@ let fftYMax = null;  // null = auto-rescale, ellers fast loft
 let fftSmoothing = 0.5;
 let sweepMode = 'peak';
 let sweepRecording = false;
+let sweepRecordingId = 0;   // tæller op for hver ny måling, så vi kan identificere
+                             // hvilken måling en schedulet auto-stop hører til
 let prevSmoothing = null;
+// Valgfri tidsbegrænsning på sweep-måling. Hvis sat (sekunder > 0), stoppes
+// målingen automatisk efter den tid. Bruges når man kører sweep fra en ekstern
+// lydkilde og kender dens varighed. Default fra (null).
+let sweepAutoStopSec = null;
+let sweepAutoStopTimer = null;   // setTimeout id, så vi kan rydde det op
+let sweepAutoStopDeadline = null; // ms-tidsstempel hvor auto-stop udløses (for nedtælling)
+
+// Måle-område: når aktiveret, akkumuleres kun bins indenfor [fra, til] Hz.
+// Fjerner artefakter ved sweep-start og -slut (særligt "halestriben" lige
+// under slutfrekvensen, hvor ekstra energi koncentreres når en intern eller
+// ekstern generator stopper).
+let sweepRangeOn = false;
+let sweepRangeFromHz = 200;
+let sweepRangeToHz = 3800;
 
 // Højpas-filter: hjælper mod lavfrekvent støj (trafik, håndteringsstøj,
 // mikrofonens DC-drift). Default fra; cutoff 150 Hz er fornuftig
@@ -966,6 +994,8 @@ function saveProject() {
       highpassOn, highpassCutoff,
       sweepFloorSubtract,
       sweepYScale, sweepYMax,
+      sweepAutoStopSec,
+      sweepRangeOn, sweepRangeFromHz, sweepRangeToHz,
       activeTab
     },
     markers: {
@@ -1117,6 +1147,30 @@ function applyProjectState(state) {
   } else if (s.sweepYMax === null) {
     sweepYMax = null;
     document.getElementById('sweepYMaxInput').value = '';
+  }
+  if (typeof s.sweepAutoStopSec === 'number' && s.sweepAutoStopSec > 0) {
+    sweepAutoStopSec = s.sweepAutoStopSec;
+    document.getElementById('sweepAutoStopChk').checked = true;
+    document.getElementById('sweepAutoStopSec').disabled = false;
+    document.getElementById('sweepAutoStopSec').value = String(s.sweepAutoStopSec);
+  } else if (s.sweepAutoStopSec === null) {
+    sweepAutoStopSec = null;
+    document.getElementById('sweepAutoStopChk').checked = false;
+    document.getElementById('sweepAutoStopSec').disabled = true;
+  }
+  if (typeof s.sweepRangeOn === 'boolean') {
+    sweepRangeOn = s.sweepRangeOn;
+    document.getElementById('sweepRangeChk').checked = sweepRangeOn;
+    document.getElementById('sweepRangeFrom').disabled = !sweepRangeOn;
+    document.getElementById('sweepRangeTo').disabled = !sweepRangeOn;
+  }
+  if (typeof s.sweepRangeFromHz === 'number') {
+    sweepRangeFromHz = s.sweepRangeFromHz;
+    document.getElementById('sweepRangeFrom').value = String(s.sweepRangeFromHz);
+  }
+  if (typeof s.sweepRangeToHz === 'number') {
+    sweepRangeToHz = s.sweepRangeToHz;
+    document.getElementById('sweepRangeTo').value = String(s.sweepRangeToHz);
   }
   timeZoomStart = s.timeZoomStart || 0;
   timeZoomSpan = s.timeZoomSpan;
@@ -1431,11 +1485,19 @@ async function startGen(id) {
       }
       g.osc.start();
       setTimeout(() => { if (g.isOn) stopGen(id); }, dur * 1000 + 50);
-      // Stop sweep-måling automatisk 500ms efter sweepet er færdigt, så
-      // spektret fryser uden risiko for at uønskede toner kommer med
-      setTimeout(() => {
-        if (sweepRecording) stopSweepRecord();
-      }, dur * 1000 + 500);
+      // Auto-stop sweep-måling 500ms efter generatorens sweep slutter — MEN
+      // kun hvis vi faktisk måler lige nu OG denne generator-instans er den
+      // der "ejer" målingen (den blev startet mens vi målte). Det forhindrer
+      // at en tidligere generator-kald stopper en senere ekstern-kilde-måling.
+      if (sweepRecording) {
+        const ourRecordingId = sweepRecordingId;
+        setTimeout(() => {
+          // Stop kun hvis vi stadig måler den SAMME måling som da vi startede
+          if (sweepRecording && sweepRecordingId === ourRecordingId) {
+            stopSweepRecord();
+          }
+        }, dur * 1000 + 500);
+      }
       setTab('sweep');
     }
 
@@ -1715,7 +1777,15 @@ function updateSpectrum() {
     if (!peakSpectrum || peakSpectrum.length !== freqData.length) {
       peakSpectrum = new Float32Array(freqData.length);
     }
-    for (let i = 0; i < freqData.length; i++) {
+    // Hvis måle-område er aktiveret: beregn de bin-indekser der må akkumuleres
+    let iLo = 0, iHi = freqData.length - 1;
+    if (sweepRangeOn) {
+      const sr = getEffectiveSampleRate();
+      const binHz = (sr / 2) / freqData.length;
+      iLo = Math.max(0, Math.floor(sweepRangeFromHz / binHz));
+      iHi = Math.min(freqData.length - 1, Math.ceil(sweepRangeToHz / binHz));
+    }
+    for (let i = iLo; i <= iHi; i++) {
       if (freqData[i] > peakSpectrum[i]) peakSpectrum[i] = freqData[i];
     }
   }
@@ -1753,12 +1823,31 @@ function startSweepRecord() {
   prevSmoothing = analyser.smoothingTimeConstant;
   analyser.smoothingTimeConstant = 0;
   sweepRecording = true;
+  sweepRecordingId++;
   const btn = document.getElementById('sweepRecordBtn');
   btn.textContent = 'Stop måling';
   btn.classList.remove('primary');
   btn.classList.add('danger');
   document.getElementById('sweepRecStatus').className = 'status recording';
   document.getElementById('sweepRecLabel').textContent = 'Måler — smoothing fra';
+  // Valgfri auto-stop efter et antal sekunder (fx hvis lydkilden er på en
+  // anden enhed og man kender dens varighed)
+  if (sweepAutoStopTimer != null) {
+    clearTimeout(sweepAutoStopTimer);
+    sweepAutoStopTimer = null;
+  }
+  if (sweepAutoStopSec != null && sweepAutoStopSec > 0) {
+    const ourId = sweepRecordingId;
+    sweepAutoStopDeadline = Date.now() + sweepAutoStopSec * 1000;
+    sweepAutoStopTimer = setTimeout(() => {
+      sweepAutoStopTimer = null;
+      sweepAutoStopDeadline = null;
+      // Stop kun hvis det stadig er den samme måling
+      if (sweepRecording && sweepRecordingId === ourId) {
+        stopSweepRecord();
+      }
+    }, sweepAutoStopSec * 1000);
+  }
 }
 
 function stopSweepRecord() {
@@ -1766,13 +1855,45 @@ function stopSweepRecord() {
     analyser.smoothingTimeConstant = prevSmoothing;
     prevSmoothing = null;
   }
+  if (sweepAutoStopTimer != null) {
+    clearTimeout(sweepAutoStopTimer);
+    sweepAutoStopTimer = null;
+  }
+  sweepAutoStopDeadline = null;
   sweepRecording = false;
+  // Trim ranternes inderste 50 Hz / 30 bins for at fjerne FFT-lækage-haler.
+  // FFT'ens Blackman-vindue spreder energi 5-10 bins væk fra centerfrekvensen,
+  // og når sweepet bremser ned ved slutfrekvensen koncentreres en kort puls af
+  // energi der lækker ind i de nærmest underliggende bins. Det giver falske
+  // toppe lige under sweep-slut (og over sweep-start). Vi nulstiller derfor
+  // peak-værdier indenfor en konservativ margen omkring begge range-grænser.
+  trimSweepEdges();
   const btn = document.getElementById('sweepRecordBtn');
   btn.textContent = 'Start måling';
   btn.classList.remove('danger');
   btn.classList.add('primary');
   document.getElementById('sweepRecStatus').className = 'status';
   document.getElementById('sweepRecLabel').textContent = 'Måling stoppet';
+}
+
+function trimSweepEdges() {
+  if (!peakSpectrum || !sweepRangeOn) return;
+  const sr = getEffectiveSampleRate();
+  const binHz = (sr / 2) / peakSpectrum.length;
+  // Margen: mindst 50 Hz, og mindst 30 bins, så små FFT-størrelser også klares.
+  const marginHz = Math.max(50, 30 * binHz);
+  // Trim nær den nedre grænse (indvendig side)
+  const loEdge = sweepRangeFromHz;
+  const loInner = loEdge + marginHz;
+  const iLoStart = Math.max(0, Math.floor(loEdge / binHz));
+  const iLoEnd = Math.min(peakSpectrum.length - 1, Math.ceil(loInner / binHz));
+  for (let i = iLoStart; i <= iLoEnd; i++) peakSpectrum[i] = 0;
+  // Trim nær den øvre grænse (indvendig side)
+  const hiEdge = sweepRangeToHz;
+  const hiInner = hiEdge - marginHz;
+  const iHiStart = Math.max(0, Math.floor(hiInner / binHz));
+  const iHiEnd = Math.min(peakSpectrum.length - 1, Math.ceil(hiEdge / binHz));
+  for (let i = iHiStart; i <= iHiEnd; i++) peakSpectrum[i] = 0;
 }
 
 // ===== Tegning =====
@@ -2496,6 +2617,38 @@ function drawSweep() {
     }
   }
 
+  // Tegn måle-områdes-markering: gråtonet baggrund udenfor [from, to] for at
+  // gøre det tydeligt at akkumulering kun sker indenfor området. Tegnes
+  // før centroid og kurve, så de ligger ovenpå.
+  if (sweepRangeOn) {
+    ctx.fillStyle = muted + '22';
+    // Venstre udenfor-område: 0 til from
+    if (sweepRangeFromHz > 0) {
+      const xR = padL + Math.min(sweepRangeFromHz, maxFreq) / maxFreq * plotW;
+      ctx.fillRect(padL, padT, xR - padL, plotH);
+    }
+    // Højre udenfor-område: to til maxFreq
+    if (sweepRangeToHz < maxFreq) {
+      const xL = padL + Math.max(0, sweepRangeToHz) / maxFreq * plotW;
+      ctx.fillRect(xL, padT, padL + plotW - xL, plotH);
+    }
+    // Tydelige grænselinjer
+    ctx.strokeStyle = muted + '99';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 4]);
+    ctx.beginPath();
+    if (sweepRangeFromHz > 0 && sweepRangeFromHz < maxFreq) {
+      const x1 = padL + sweepRangeFromHz / maxFreq * plotW;
+      ctx.moveTo(x1, padT); ctx.lineTo(x1, padT + plotH);
+    }
+    if (sweepRangeToHz > 0 && sweepRangeToHz < maxFreq) {
+      const x2 = padL + sweepRangeToHz / maxFreq * plotW;
+      ctx.moveTo(x2, padT); ctx.lineTo(x2, padT + plotH);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   // Tegn evt. centroid-region som lysere udfyldt rektangel før selve kurven,
   // så kurven ses ovenpå
   let regionFA = null, regionFB = null;
@@ -2620,10 +2773,20 @@ function drawSweep() {
     ctx.fill();
   }
 
-  // Opdatér info-feltet
+  // Opdatér info-feltet og status-label
   const info = document.getElementById('sweepInfo');
   const parts = [];
-  if (sweepRecording) parts.push('måler…');
+  if (sweepRecording) {
+    // Vis auto-stop nedtælling hvis aktiv
+    if (sweepAutoStopDeadline != null) {
+      const remainingMs = Math.max(0, sweepAutoStopDeadline - Date.now());
+      const remainingSec = Math.ceil(remainingMs / 1000);
+      parts.push('måler… stop om ' + remainingSec + 's');
+      document.getElementById('sweepRecLabel').textContent = 'Måler — stop om ' + remainingSec + ' s';
+    } else {
+      parts.push('måler…');
+    }
+  }
   for (const id of [1, 2]) {
     const hz = getCurrentSweepHz(id);
     if (hz != null) {
@@ -3073,6 +3236,51 @@ function clearCentroidRegion() {
 
 function onSweepFloorToggle() {
   sweepFloorSubtract = document.getElementById('sweepFloorChk').checked;
+  draw();
+}
+
+function onSweepAutoStopToggle() {
+  const on = document.getElementById('sweepAutoStopChk').checked;
+  document.getElementById('sweepAutoStopSec').disabled = !on;
+  if (on) {
+    const v = parseFloat(document.getElementById('sweepAutoStopSec').value);
+    sweepAutoStopSec = (isFinite(v) && v > 0) ? v : null;
+  } else {
+    sweepAutoStopSec = null;
+  }
+}
+
+function onSweepAutoStopChange() {
+  const v = parseFloat(document.getElementById('sweepAutoStopSec').value);
+  if (!isFinite(v) || v <= 0) {
+    document.getElementById('sweepAutoStopSec').value = '60';
+    sweepAutoStopSec = document.getElementById('sweepAutoStopChk').checked ? 60 : null;
+    return;
+  }
+  if (document.getElementById('sweepAutoStopChk').checked) {
+    sweepAutoStopSec = v;
+  }
+}
+
+function onSweepRangeToggle() {
+  sweepRangeOn = document.getElementById('sweepRangeChk').checked;
+  document.getElementById('sweepRangeFrom').disabled = !sweepRangeOn;
+  document.getElementById('sweepRangeTo').disabled = !sweepRangeOn;
+  draw();
+}
+
+function onSweepRangeChange() {
+  const a = parseFloat(document.getElementById('sweepRangeFrom').value);
+  const b = parseFloat(document.getElementById('sweepRangeTo').value);
+  // Begge skal være gyldige og a < b
+  if (!isFinite(a) || !isFinite(b) || a < 0 || b <= a) {
+    // Sæt tilbage til sidste gyldige værdier
+    document.getElementById('sweepRangeFrom').value = String(sweepRangeFromHz);
+    document.getElementById('sweepRangeTo').value = String(sweepRangeToHz);
+    return;
+  }
+  sweepRangeFromHz = a;
+  sweepRangeToHz = b;
   draw();
 }
 
