@@ -913,6 +913,7 @@ window.addEventListener('load', () => {
   resizeCanvases();
   window.addEventListener('resize', () => { resizeCanvases(); draw(); });
   draw();
+  initTouchHandlers();
 });
 
 function resizeCanvases() {
@@ -1763,6 +1764,158 @@ function resetSweepZoom() {
   sweepZoomMax = null;
   document.getElementById('sweepZoomResetBtn').style.display = 'none';
   draw();
+}
+
+// ===== Touch-support (iPad / mobiltelefon) =====
+// Mapper touch-events til den eksisterende mus-logik.
+// Én finger: tap = markør, træk = centroid-region.
+// To fingre: knyb/spred = zoom.
+function initTouchHandlers() {
+  setupCanvasTouch('sweepCanvas', {
+    onTap:       (hz) => { sweepMarkerHz = hz; updateSweepInfo(); draw(); },
+    onDragStart: (hz) => { sweepDragStartHz = hz; sweepDragCurHz = hz; sweepDragActive = false; },
+    onDragMove:  (hz) => {
+      sweepDragCurHz = hz;
+      const c = document.getElementById('sweepCanvas');
+      const hzPerPx = (sweepZoomMax != null ? sweepZoomMax - sweepZoomMin : maxFreq) / (c.clientWidth - 67);
+      if (Math.abs(hz - sweepDragStartHz) > 5 * hzPerPx) sweepDragActive = true;
+      sweepHoverHz = hz; updateSweepInfo(); draw();
+    },
+    onDragEnd:   (hz) => {
+      if (sweepDragActive) {
+        sweepCentroidA = Math.min(sweepDragStartHz, hz);
+        sweepCentroidB = Math.max(sweepDragStartHz, hz);
+        document.getElementById('centroidClearBtn').style.display = '';
+      }
+      sweepDragStartHz = null; sweepDragCurHz = null; sweepDragActive = false;
+      sweepHoverHz = null; updateSweepInfo(); draw();
+    },
+    onZoom: (f1, f2) => {
+      sweepZoomMin = Math.max(0, f1);
+      sweepZoomMax = Math.min(maxFreq, f2);
+      document.getElementById('sweepZoomResetBtn').style.display = '';
+      draw();
+    },
+    hzFromX: (x, plotW) => sweepXToHz(x, plotW),
+    padL: 55, padR: 12,
+  });
+
+  setupCanvasTouch('fftCanvas', {
+    onTap:       (hz) => { fftMarkerHz = hz; updateFftInfo(); draw(); },
+    onDragStart: (hz) => { fftNormalDragStart = hz; fftNormalDragCur = hz; fftNormalDragActive = false; },
+    onDragMove:  (hz) => {
+      fftNormalDragCur = hz;
+      const c = document.getElementById('fftCanvas');
+      const fmin = fftZoomMin || 0, fmax = fftZoomMax || maxFreq;
+      const hzPerPx = (fmax - fmin) / (c.clientWidth - 67);
+      if (Math.abs(hz - fftNormalDragStart) > 5 * hzPerPx) fftNormalDragActive = true;
+      fftHoverHz = hz; updateFftInfo(); draw();
+    },
+    onDragEnd:   (hz) => {
+      if (fftNormalDragActive) {
+        fftCentroidA = Math.min(fftNormalDragStart, hz);
+        fftCentroidB = Math.max(fftNormalDragStart, hz);
+        document.getElementById('fftCentroidClearBtn').style.display = '';
+      }
+      fftNormalDragStart = null; fftNormalDragCur = null; fftNormalDragActive = false;
+      fftHoverHz = null; updateFftInfo(); draw();
+    },
+    onZoom: (f1, f2) => {
+      fftZoomMin = Math.max(0, f1);
+      fftZoomMax = f2;
+      draw();
+    },
+    hzFromX: (x, plotW) => xToHz(x, fftZoomMin || 0, fftZoomMax || maxFreq, plotW),
+    padL: 55, padR: 12,
+  });
+}
+
+function setupCanvasTouch(canvasId, cb) {
+  const c = document.getElementById(canvasId);
+  let mode = 'idle';
+  let dragStartHz = null;
+  let pinchStartDist = null;
+  let pinchStartF1 = null, pinchStartF2 = null;
+  const TAP_MAX_MOVE = 10;
+  const TAP_MAX_DUR  = 300;
+  let touchStartTime = 0;
+  let touchStartX = 0;
+
+  function getPlotX(touch) {
+    const rect = c.getBoundingClientRect();
+    return touch.clientX - rect.left - cb.padL;
+  }
+  function touchHz(touch) {
+    const plotW = c.clientWidth - cb.padL - cb.padR;
+    const x = getPlotX(touch);
+    if (x < 0 || x > plotW) return null;
+    return cb.hzFromX(x, plotW);
+  }
+  function pinchDist(t1, t2) {
+    return Math.abs(t1.clientX - t2.clientX);
+  }
+
+  c.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const tList = Array.from(e.touches);
+    if (tList.length === 1) {
+      mode = 'drag';
+      touchStartTime = Date.now();
+      touchStartX = tList[0].clientX;
+      dragStartHz = touchHz(tList[0]);
+      if (dragStartHz != null) cb.onDragStart(dragStartHz);
+    } else if (tList.length === 2) {
+      mode = 'zoom';
+      if (dragStartHz != null) { cb.onDragEnd(dragStartHz); dragStartHz = null; }
+      pinchStartDist = pinchDist(tList[0], tList[1]);
+      const hz1 = touchHz(tList[0]);
+      const hz2 = touchHz(tList[1]);
+      if (hz1 != null && hz2 != null) {
+        pinchStartF1 = Math.min(hz1, hz2);
+        pinchStartF2 = Math.max(hz1, hz2);
+      }
+    }
+  }, { passive: false });
+
+  c.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const tList = Array.from(e.touches);
+    if (mode === 'drag' && tList.length === 1) {
+      const hz = touchHz(tList[0]);
+      if (hz != null) cb.onDragMove(hz);
+    } else if (mode === 'zoom' && tList.length === 2) {
+      const dist = pinchDist(tList[0], tList[1]);
+      if (pinchStartDist && pinchStartF1 != null && dist > 1) {
+        const ratio = pinchStartDist / dist;
+        const center = (pinchStartF1 + pinchStartF2) / 2;
+        const span = (pinchStartF2 - pinchStartF1) * ratio;
+        cb.onZoom(center - span / 2, center + span / 2);
+      }
+    }
+  }, { passive: false });
+
+  c.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    const tList = Array.from(e.changedTouches);
+    if (mode === 'drag' && tList.length >= 1) {
+      const hz = touchHz(tList[0]);
+      const moved = Math.abs(tList[0].clientX - touchStartX);
+      const dur = Date.now() - touchStartTime;
+      if (moved < TAP_MAX_MOVE && dur < TAP_MAX_DUR) {
+        if (dragStartHz != null) cb.onDragEnd(dragStartHz);
+        if (hz != null) cb.onTap(hz);
+      } else {
+        if (hz != null) cb.onDragEnd(hz);
+        else if (dragStartHz != null) cb.onDragEnd(dragStartHz);
+      }
+      dragStartHz = null;
+    }
+    if (e.touches.length === 0) mode = 'idle';
+  }, { passive: false });
+
+  c.addEventListener('touchcancel', () => {
+    mode = 'idle'; dragStartHz = null; pinchStartDist = null;
+  }, { passive: false });
 }
 
 function exportCsv() {
