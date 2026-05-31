@@ -1,16 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="96" fill="#378ADD"/>
-  <g stroke="#ffffff" stroke-width="18" stroke-linecap="round" fill="none">
-    <path d="M 64 256 Q 96 256 96 256"/>
-    <path d="M 128 256 Q 144 196 160 256 T 192 256"/>
-    <path d="M 224 256 Q 248 156 272 256 T 320 256"/>
-    <path d="M 352 256 Q 384 196 416 256 T 448 256"/>
+  <g stroke="#ffffff" stroke-width="22" stroke-linecap="round" fill="none">
+    <path d="M 80 240 Q 96 240 96 240"/>
+    <path d="M 136 240 Q 156 160 176 240 T 216 240"/>
+    <path d="M 256 240 Q 284 120 312 240 T 368 240"/>
+    <path d="M 408 240 Q 424 240 432 240"/>
   </g>
-  <circle cx="160" cy="380" r="14" fill="#ffffff"/>
-  <circle cx="272" cy="380" r="14" fill="#ffffff"/>
-  <circle cx="384" cy="380" r="14" fill="#ffffff"/>
-  <g fill="#ffffff">
-    <text x="256" y="140" font-family="Helvetica, Arial, sans-serif"
-          font-size="68" font-weight="bold" text-anchor="middle">Lydlab</text>
-  </g>
+  <circle cx="156" cy="360" r="18" fill="#ffffff"/>
+  <circle cx="256" cy="360" r="18" fill="#ffffff"/>
+  <circle cx="356" cy="360" r="18" fill="#ffffff"/>
 </svg>
