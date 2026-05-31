@@ -88,6 +88,93 @@ body {
   margin-bottom: 16px;
 }
 
+/* ===== Vejlednings-popup ===== */
+.help-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 1000;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+.help-overlay.open { display: flex; }
+.help-modal {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  max-width: 720px;
+  width: 100%;
+  padding: 32px 36px 28px;
+  position: relative;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+}
+.help-modal h2 {
+  margin: 0 0 4px;
+  font-size: 1.25rem;
+  color: var(--blue);
+}
+.help-modal h3 {
+  font-size: 1rem;
+  margin: 22px 0 6px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+  color: var(--text);
+}
+.help-modal p, .help-modal li {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text);
+  margin: 0 0 6px;
+}
+.help-modal ul { margin: 4px 0 8px 18px; padding: 0; }
+.help-modal li { margin-bottom: 3px; }
+.help-modal code {
+  font-family: monospace;
+  background: var(--grid);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 0.82rem;
+}
+.help-modal .help-tip {
+  background: var(--blue-light, #e8f0fe);
+  border-left: 3px solid var(--blue);
+  border-radius: 0 4px 4px 0;
+  padding: 7px 12px;
+  margin: 8px 0;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+[data-theme="dark"] .help-modal .help-tip { background: #1e2a3a; }
+.help-close {
+  position: absolute;
+  top: 14px; right: 16px;
+  background: none; border: none;
+  font-size: 1.4rem; cursor: pointer;
+  color: var(--muted);
+  line-height: 1;
+  padding: 2px 6px;
+}
+.help-close:hover { color: var(--text); }
+.help-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 4px;
+}
+.help-toc a {
+  font-size: 0.8rem;
+  color: var(--blue);
+  text-decoration: none;
+  background: var(--grid);
+  border-radius: 4px;
+  padding: 3px 8px;
+}
+.help-toc a:hover { text-decoration: underline; }
+
 .header-buttons {
   display: flex;
   gap: 6px;
@@ -413,6 +500,10 @@ canvas {
     <p class="subtitle">Realtids lydanalyse med FFT. Inspireret af Datalyse.</p>
   </div>
   <div class="header-buttons">
+    <button onclick="openHelp()" title="Åbn vejledning">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px">
+        <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>Vejledning</button>
     <button onclick="copyGraph()" title="Kopiér den aktuelle graf til udklipsholderen">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
@@ -474,35 +565,6 @@ canvas {
       <select id="micDeviceSel" onchange="onMicDeviceChange()" style="max-width:200px"></select>
       <button class="small" onclick="refreshMicDeviceList()" title="Genindlæs listen over tilgængelige mikrofoner">↻</button>
     </div>
-    <div class="control-group">
-      <label>Følsomhed</label>
-      <input type="range" id="micGain" min="0" max="100" value="20" step="1" oninput="onMicGainInput()" style="width:120px">
-      <span class="value-display" id="micGainVal">0,25×</span>
-    </div>
-    <div class="control-group" title="Fjerner lavfrekvent støj (trafikrumlen, håndteringsstøj, mikrofon-drift) før FFT">
-      <label><input type="checkbox" id="highpassChk" onchange="onHighpassToggle()"> Højpas</label>
-      <input type="number" id="highpassCutoff" min="20" max="2000" value="150" step="10" style="width:70px" onchange="onHighpassCutoffChange()" disabled>
-      <span class="unit">Hz</span>
-    </div>
-    <div class="control-group">
-      <label>Maks. frekvens</label>
-      <input type="number" id="freqRangeCustom" min="50" max="48000" value="5000" step="100" style="width:90px" onchange="onCustomFreqChange()">
-      <span class="unit">Hz</span>
-      <button class="small" onclick="setMaxFreq(2000)">2 k</button>
-      <button class="small" onclick="setMaxFreq(5000)">5 k</button>
-      <button class="small" onclick="setMaxFreq(10000)">10 k</button>
-      <button class="small" onclick="setMaxFreq(20000)">20 k</button>
-    </div>
-    <div class="control-group">
-      <label>FFT-størrelse</label>
-      <select id="fftSizeSel" onchange="onFftSizeChange()">
-        <option value="1024">1024</option>
-        <option value="2048">2048</option>
-        <option value="4096">4096</option>
-        <option value="8192">8192</option>
-        <option value="16384" selected>16384</option>
-      </select>
-    </div>
   </div>
 </div>
 
@@ -530,7 +592,7 @@ canvas {
         <label>Fra</label>
         <input type="number" id="sweepFrom1" value="200" min="20" max="20000" style="width:70px">
         <label>til</label>
-        <input type="number" id="sweepTo1" value="3800" min="20" max="20000" style="width:70px">
+        <input type="number" id="sweepTo1" value="4000" min="20" max="20000" style="width:70px">
         <label>Hz over</label>
         <input type="number" id="sweepDur1" value="60" min="1" max="600" style="width:50px">
         <span class="unit">s</span>
@@ -563,7 +625,7 @@ canvas {
         <label>Fra</label>
         <input type="number" id="sweepFrom2" value="200" min="20" max="20000" style="width:70px">
         <label>til</label>
-        <input type="number" id="sweepTo2" value="3800" min="20" max="20000" style="width:70px">
+        <input type="number" id="sweepTo2" value="4000" min="20" max="20000" style="width:70px">
         <label>Hz over</label>
         <input type="number" id="sweepDur2" value="60" min="1" max="600" style="width:50px">
         <span class="unit">s</span>
@@ -584,6 +646,43 @@ canvas {
   <button class="tab-btn active" onclick="setTab('time')">Tidssignal</button>
   <button class="tab-btn" onclick="setTab('fft')">Frekvensspektrum (FFT)</button>
   <button class="tab-btn" onclick="setTab('sweep')">Sweep-måling</button>
+  <button class="tab-btn" onclick="setTab('music')" style="color:var(--muted)">♪ Musik</button>
+</div>
+
+<!-- Fælles lydindstillinger — vises kun på FFT og Sweep -->
+<div id="audioSettingsBar" class="panel" style="display:none;padding:8px 12px;margin-bottom:6px">
+  <div class="panel-row" style="gap:16px;flex-wrap:wrap">
+    <div class="control-group">
+      <label>Maks. frekvens</label>
+      <select id="freqPresetSel" onchange="onFreqPresetChange()" style="width:90px">
+        <option value="1000">1 kHz</option>
+        <option value="2000">2 kHz</option>
+        <option value="5000" selected>5 kHz</option>
+        <option value="10000">10 kHz</option>
+        <option value="20000">20 kHz</option>
+        <option value="custom">Andet…</option>
+      </select>
+      <input type="number" id="freqRangeCustom" min="50" max="48000" value="5000" step="100"
+             style="width:80px;display:none" onchange="onCustomFreqChange()">
+      <span class="unit" id="freqCustomUnit" style="display:none">Hz</span>
+    </div>
+    <div class="control-group">
+      <label>FFT-størrelse</label>
+      <select id="fftSizeSel" onchange="onFftSizeChange()">
+        <option value="1024">1024</option>
+        <option value="2048">2048</option>
+        <option value="4096">4096</option>
+        <option value="8192">8192</option>
+        <option value="16384" selected>16384</option>
+      </select>
+    </div>
+    <div class="control-group" title="Fjerner lavfrekvent støj (trafikrumlen, håndteringsstøj) fra signalet inden FFT">
+      <label><input type="checkbox" id="highpassChk" onchange="onHighpassToggle()"> Højpas</label>
+      <input type="number" id="highpassCutoff" min="20" max="2000" value="150" step="10"
+             style="width:70px" onchange="onHighpassCutoffChange()" disabled>
+      <span class="unit">Hz</span>
+    </div>
+  </div>
 </div>
 
 <!-- Tidssignal -->
@@ -727,7 +826,7 @@ canvas {
       <span><b>Sweep-respons</b></span>
       <span class="graph-info" id="sweepInfo">Klik for at måle en frekvens</span>
     </div>
-    <canvas id="sweepCanvas" height="320" onmousedown="onSweepMouseDown(event)" onmousemove="onSweepMouseMove(event)" onmouseup="onSweepMouseUp(event)" onmouseleave="onSweepMouseLeave(event)" oncontextmenu="onSweepContextMenu(event)"></canvas>
+    <canvas id="sweepCanvas" height="320" onmousedown="onSweepMouseDown(event)" onmousemove="onSweepMouseMove(event)" onmouseup="onSweepMouseUp(event)" onmouseleave="onSweepMouseLeave(event)" oncontextmenu="onSweepContextMenu(event)" onwheel="onSweepWheel(event)"></canvas>
   </div>
   <div class="panel">
     <div class="panel-row">
@@ -779,7 +878,7 @@ canvas {
         <label><input type="checkbox" id="sweepRangeChk" onchange="onSweepRangeToggle()"> Begræns til</label>
         <input type="number" id="sweepRangeFrom" min="0" max="48000" value="200" step="10" style="width:65px" disabled onchange="onSweepRangeChange()">
         <span class="unit">–</span>
-        <input type="number" id="sweepRangeTo" min="0" max="48000" value="3800" step="10" style="width:65px" disabled onchange="onSweepRangeChange()">
+        <input type="number" id="sweepRangeTo" min="0" max="48000" value="4000" step="10" style="width:65px" disabled onchange="onSweepRangeChange()">
         <span class="unit">Hz</span>
       </div>
       <div class="control-group">
@@ -788,6 +887,41 @@ canvas {
       </div>
     </div>
     <div class="help-text">Tryk "Start måling" lige før du starter sweepet. <b>Klik</b> sætter punkt-markør. <b>Træk</b> beregner centroid/FWHM/Q. <b>Shift+træk</b> zoomer ind på et område.</div>
+  </div>
+</div>
+
+<!-- Musik-fane -->
+<div id="tab-music" class="tab-content">
+  <div class="graph-container">
+    <div class="graph-header">
+      <span><b>Pitch-detektion og overtoneanalyse</b></span>
+      <span class="graph-info" id="musicInfo">Start mikrofonen og spil eller syng en tone</span>
+    </div>
+    <canvas id="musicCanvas" height="380"></canvas>
+  </div>
+  <div class="panel">
+    <div class="panel-row">
+      <div class="control-group">
+        <label>Reference</label>
+        <input type="number" id="musicRefHz" value="440" min="400" max="480" step="0.5" style="width:70px" onchange="onMusicRefChange()">
+        <span class="unit">Hz (A4)</span>
+      </div>
+      <div class="control-group">
+        <label>Min. styrke</label>
+        <input type="range" id="musicThreshold" min="0.001" max="0.1" step="0.001" value="0.01" style="width:100px" oninput="onMusicThresholdChange()">
+        <span class="value-display" id="musicThreshVal">0,010</span>
+      </div>
+      <div class="control-group">
+        <label><input type="checkbox" id="musicShowHarmonics" checked onchange="draw()"> Vis overtoner</label>
+      </div>
+      <div class="control-group">
+        <label><input type="checkbox" id="musicShowKeyboard" checked onchange="draw()"> Vis klaviatur</label>
+      </div>
+      <div class="control-group">
+        <button class="pause-btn primary" onclick="togglePause()" style="display:none" title="Fastfrys/genoptag visningen — mikrofonen kører videre">⏸ Pause</button>
+      </div>
+    </div>
+    <div class="help-text">Spil eller syng en tone. Programmet finder grundfrekvensen via autokorrellation og viser stemning i cent samt overtonestruktur. ±50 cent = en halv tone.</div>
   </div>
 </div>
 
@@ -829,7 +963,7 @@ let sweepAutoStopDeadline = null; // ms-tidsstempel hvor auto-stop udløses (for
 // ekstern generator stopper).
 let sweepRangeOn = false;
 let sweepRangeFromHz = 200;
-let sweepRangeToHz = 3800;
+let sweepRangeToHz = 4000;
 
 // Højpas-filter: hjælper mod lavfrekvent støj (trafik, håndteringsstøj,
 // mikrofonens DC-drift). Default fra; cutoff 150 Hz er fornuftig
@@ -866,6 +1000,12 @@ let sweepDragActive = false;   // sand når der trækkes (ikke bare klik)
 // fra visningen (selve dataene ændres ikke).
 let sweepFloorSubtract = false;
 let sweepAxisType = 'lin';   // 'lin' | 'log'
+
+// ===== Musik-fane state =====
+let musicRefHz = 440;        // Reference A4 i Hz
+let musicThreshold = 0.01;   // Min. RMS for at vise pitch
+let musicDetectedHz = null;  // Senest detekterede grundfrekvens
+let musicSmoothedHz = null;  // Udjævnet frekvens til visning
 let sweepZoomMin = 0;        // Hz - venstre kant ved zoom (0 = ingen zoom)
 let sweepZoomMax = null;     // Hz - højre kant (null = maxFreq)
 let sweepShiftDragStart = null;  // Hz - start på shift+drag zoom
@@ -917,7 +1057,7 @@ window.addEventListener('load', () => {
 });
 
 function resizeCanvases() {
-  ['timeCanvas', 'fftCanvas', 'sweepCanvas'].forEach(id => {
+  ['timeCanvas', 'fftCanvas', 'sweepCanvas', 'musicCanvas'].forEach(id => {
     resizeOneCanvas(id);
   });
 }
@@ -954,6 +1094,21 @@ function resizeOneCanvas(id) {
 }
 
 // ===== Tema =====
+function openHelp() {
+  document.getElementById('helpOverlay').classList.add('open');
+  document.getElementById('helpModal').scrollTop = 0;
+}
+function closeHelp() {
+  document.getElementById('helpOverlay').classList.remove('open');
+}
+function onHelpOverlayClick(e) {
+  if (e.target === document.getElementById('helpOverlay')) closeHelp();
+}
+// Luk med Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeHelp();
+});
+
 function toggleTheme() {
   const html = document.documentElement;
   const goingDark = html.getAttribute('data-theme') !== 'dark';
@@ -1126,8 +1281,7 @@ function applyProjectState(state) {
   }
   // Frekvensområde
   if (s.maxFreq) {
-    maxFreq = s.maxFreq;
-    document.getElementById('freqRangeCustom').value = String(s.maxFreq);
+    setMaxFreq(s.maxFreq);
   }
   // FFT-indstillinger
   if (s.fftScale) {
@@ -1332,12 +1486,7 @@ async function startMic() {
     }
     micStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
     micSource = audioCtx.createMediaStreamSource(micStream);
-    // Gain-node til at justere "følsomhed" digitalt
-    micGainNode = audioCtx.createGain();
-    micGainNode.gain.value = getCurrentMicGain();
     // Højpas-filter: i kæden hele tiden, men styres af `highpassOn`.
-    // Når slået fra, sættes cutoff meget lavt (1 Hz) så den reelt er
-    // gennemsigtig. Q=0.707 (Butterworth) for fladt pasbånd.
     highpassNode = audioCtx.createBiquadFilter();
     highpassNode.type = 'highpass';
     highpassNode.frequency.value = highpassOn ? highpassCutoff : 1;
@@ -1345,8 +1494,7 @@ async function startMic() {
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = fftSize;
     analyser.smoothingTimeConstant = fftSmoothing;
-    micSource.connect(micGainNode);
-    micGainNode.connect(highpassNode);
+    micSource.connect(highpassNode);
     highpassNode.connect(analyser);
 
     // Mikrofonen kører nu - eventuelle indlæste data overskrives og
@@ -1384,22 +1532,6 @@ async function startMic() {
   }
 }
 
-function getCurrentMicGain() {
-  // 0..100 slider → 0,1× til 10× (eksponentiel skala så midten er 1×)
-  const sliderVal = parseInt(document.getElementById('micGain').value, 10);
-  // 0 → 0,1, 50 → 1,0, 100 → 10
-  return Math.pow(10, (sliderVal - 50) / 50);
-}
-
-function onMicGainInput() {
-  const gain = getCurrentMicGain();
-  document.getElementById('micGainVal').textContent =
-    gain >= 1 ? gain.toFixed(1).replace('.', ',') + '×'
-              : gain.toFixed(2).replace('.', ',') + '×';
-  if (micGainNode) {
-    micGainNode.gain.setValueAtTime(gain, audioCtx.currentTime);
-  }
-}
 
 function onHighpassToggle() {
   highpassOn = document.getElementById('highpassChk').checked;
@@ -1645,19 +1777,45 @@ function onGenGainInput(id) {
 
 // ===== Kontrolhåndtering =====
 function setMaxFreq(hz) {
-  document.getElementById('freqRangeCustom').value = String(hz);
+  // Vælg den matchende preset-option hvis mulig, ellers "custom"
+  const sel = document.getElementById('freqPresetSel');
+  const opt = Array.from(sel.options).find(o => parseInt(o.value) === hz);
+  if (opt) {
+    sel.value = String(hz);
+    document.getElementById('freqRangeCustom').style.display = 'none';
+    document.getElementById('freqCustomUnit').style.display = 'none';
+  } else {
+    sel.value = 'custom';
+    document.getElementById('freqRangeCustom').value = String(hz);
+    document.getElementById('freqRangeCustom').style.display = '';
+    document.getElementById('freqCustomUnit').style.display = '';
+  }
   onCustomFreqChange();
+}
+
+function onFreqPresetChange() {
+  const sel = document.getElementById('freqPresetSel');
+  const customInput = document.getElementById('freqRangeCustom');
+  const customUnit  = document.getElementById('freqCustomUnit');
+  if (sel.value === 'custom') {
+    customInput.style.display = '';
+    customUnit.style.display  = '';
+    customInput.focus();
+  } else {
+    customInput.style.display = 'none';
+    customUnit.style.display  = 'none';
+    customInput.value = sel.value;
+    onCustomFreqChange();
+  }
 }
 
 function onCustomFreqChange() {
   let v = parseInt(document.getElementById('freqRangeCustom').value, 10);
   if (isNaN(v) || v < 50) return;
-  // Begræns til Nyquist hvis vi har en audioCtx
   if (audioCtx) v = Math.min(v, audioCtx.sampleRate / 2);
   maxFreq = v;
   fftZoomMin = null;
   fftZoomMax = null;
-  clearSweep();
   draw();
 }
 
@@ -1834,10 +1992,12 @@ function setupCanvasTouch(canvasId, cb) {
   const c = document.getElementById(canvasId);
   let mode = 'idle';
   let dragStartHz = null;
-  let pinchStartDist = null;
-  let pinchStartF1 = null, pinchStartF2 = null;
+  let pinchPrevDist = null;
+  let pinchCenterHz = null;
+  let pinchPrevF1 = null, pinchPrevF2 = null;
   const TAP_MAX_MOVE = 10;
   const TAP_MAX_DUR  = 300;
+  const PINCH_DAMPING = 0.35; // 0=ingen zoom, 1=fuld zoom — lavere = blødere
   let touchStartTime = 0;
   let touchStartX = 0;
 
@@ -1867,12 +2027,13 @@ function setupCanvasTouch(canvasId, cb) {
     } else if (tList.length === 2) {
       mode = 'zoom';
       if (dragStartHz != null) { cb.onDragEnd(dragStartHz); dragStartHz = null; }
-      pinchStartDist = pinchDist(tList[0], tList[1]);
+      pinchPrevDist = pinchDist(tList[0], tList[1]);
       const hz1 = touchHz(tList[0]);
       const hz2 = touchHz(tList[1]);
       if (hz1 != null && hz2 != null) {
-        pinchStartF1 = Math.min(hz1, hz2);
-        pinchStartF2 = Math.max(hz1, hz2);
+        pinchPrevF1 = Math.min(hz1, hz2);
+        pinchPrevF2 = Math.max(hz1, hz2);
+        pinchCenterHz = (hz1 + hz2) / 2;
       }
     }
   }, { passive: false });
@@ -1885,11 +2046,19 @@ function setupCanvasTouch(canvasId, cb) {
       if (hz != null) cb.onDragMove(hz);
     } else if (mode === 'zoom' && tList.length === 2) {
       const dist = pinchDist(tList[0], tList[1]);
-      if (pinchStartDist && pinchStartF1 != null && dist > 1) {
-        const ratio = pinchStartDist / dist;
-        const center = (pinchStartF1 + pinchStartF2) / 2;
-        const span = (pinchStartF2 - pinchStartF1) * ratio;
-        cb.onZoom(center - span / 2, center + span / 2);
+      if (pinchPrevDist && pinchPrevF1 != null && dist > 1) {
+        // Inkrementelt: sammenlign med forrige frame, ikke startpunktet
+        const rawRatio = pinchPrevDist / dist; // >1 = zoom ud, <1 = zoom ind
+        // Dæmp: blend rawRatio mod 1 — lavere PINCH_DAMPING = blødere zoom
+        const dampedRatio = 1 + (rawRatio - 1) * PINCH_DAMPING;
+        const span = pinchPrevF2 - pinchPrevF1;
+        const newSpan = Math.max(50, span * dampedRatio);
+        const newF1 = pinchCenterHz - newSpan / 2;
+        const newF2 = pinchCenterHz + newSpan / 2;
+        cb.onZoom(newF1, newF2);
+        pinchPrevDist = dist;
+        pinchPrevF1 = newF1;
+        pinchPrevF2 = newF2;
       }
     }
   }, { passive: false });
@@ -1914,7 +2083,7 @@ function setupCanvasTouch(canvasId, cb) {
   }, { passive: false });
 
   c.addEventListener('touchcancel', () => {
-    mode = 'idle'; dragStartHz = null; pinchStartDist = null;
+    mode = 'idle'; dragStartHz = null; pinchPrevDist = null; pinchCenterHz = null;
   }, { passive: false });
 }
 
@@ -2010,13 +2179,16 @@ function setTab(name) {
   activeTab = name;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  const map = { time: 0, fft: 1, sweep: 2 };
+  const map = { time: 0, fft: 1, sweep: 2, music: 3 };
   const idx = map[name];
   document.querySelectorAll('.tab-btn')[idx].classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
-  // Resize det nu-synlige canvas (det kunne være sat op mens det var skjult)
-  const canvasIds = { time: 'timeCanvas', fft: 'fftCanvas', sweep: 'sweepCanvas' };
-  resizeOneCanvas(canvasIds[name]);
+  // Lydindstillinger kun relevante på FFT og Sweep
+  document.getElementById('audioSettingsBar').style.display =
+    (name === 'time' || name === 'music') ? 'none' : '';
+  // Resize det nu-synlige canvas
+  const canvasIds = { time: 'timeCanvas', fft: 'fftCanvas', sweep: 'sweepCanvas', music: 'musicCanvas' };
+  if (canvasIds[name]) resizeOneCanvas(canvasIds[name]);
   draw();
 }
 
@@ -2217,6 +2389,7 @@ function draw() {
   if (activeTab === 'time') drawTime();
   else if (activeTab === 'fft') drawFft();
   else if (activeTab === 'sweep') drawSweep();
+  else if (activeTab === 'music') drawMusic();
 }
 
 // Bestemmer hvilket tidsudsnit (i ms) der vises - bruges af både tegning og klik
@@ -3803,6 +3976,25 @@ function onSweepMouseLeave(e) {
   draw();
 }
 
+function onSweepWheel(e) {
+  e.preventDefault();
+  const hz = canvasToHzSweep(e);
+  if (hz == null) return;
+  const factor = e.deltaY > 0 ? 1.25 : 0.8;
+  const fmin = sweepZoomMin;
+  const fmax = sweepZoomMax != null ? sweepZoomMax : maxFreq;
+  const span = fmax - fmin;
+  const frac = (hz - fmin) / span;
+  const newSpan = Math.max(50, span * factor);
+  let newMin = Math.max(0, hz - frac * newSpan);
+  let newMax = newMin + newSpan;
+  if (newMax > maxFreq) { newMax = maxFreq; newMin = Math.max(0, newMax - newSpan); }
+  sweepZoomMin = newMin;
+  sweepZoomMax = newMax >= maxFreq ? null : newMax;
+  document.getElementById('sweepZoomResetBtn').style.display = sweepZoomMax != null ? '' : 'none';
+  draw();
+}
+
 function onSweepContextMenu(e) {
   e.preventDefault();
   // Højreklik fjerner centroid-region hvis den er der; ellers fjerner punkt-markør
@@ -3821,6 +4013,361 @@ function clearCentroidRegion() {
   document.getElementById('centroidClearBtn').style.display = 'none';
   updateSweepInfo();
   draw();
+}
+
+// ===== MUSIK-FANE =====
+
+function onMusicRefChange() {
+  musicRefHz = parseFloat(document.getElementById('musicRefHz').value) || 440;
+}
+function onMusicThresholdChange() {
+  musicThreshold = parseFloat(document.getElementById('musicThreshold').value);
+  document.getElementById('musicThreshVal').textContent =
+    musicThreshold.toFixed(3).replace('.', ',');
+}
+
+// Autokorrellation-baseret pitch-detektion (mere robust end FFT-top for overtonerige instrumenter)
+function detectPitch(buf, sampleRate) {
+  const SIZE = buf.length;
+  const MAX_PERIOD = Math.floor(sampleRate / 50);   // ~50 Hz minimum
+  const MIN_PERIOD = Math.floor(sampleRate / 2000); // ~2000 Hz maksimum
+
+  // Beregn RMS — hvis signalet er for stille, spring over
+  let rms = 0;
+  for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
+  rms = Math.sqrt(rms / SIZE);
+  if (rms < musicThreshold) return null;
+
+  // Autokorrellation
+  const corr = new Float32Array(MAX_PERIOD);
+  for (let lag = MIN_PERIOD; lag < MAX_PERIOD; lag++) {
+    let s = 0;
+    for (let i = 0; i < SIZE - lag; i++) s += buf[i] * buf[i + lag];
+    corr[lag] = s;
+  }
+
+  // Find første lokale maksimum efter initial dip
+  // (spring over lag=0 og de første dip)
+  let dip = false;
+  let bestLag = -1, bestVal = -Infinity;
+  for (let lag = MIN_PERIOD; lag < MAX_PERIOD - 1; lag++) {
+    if (!dip && corr[lag] < 0) { dip = true; continue; }
+    if (dip && corr[lag] > corr[lag - 1] && corr[lag] > corr[lag + 1]) {
+      if (corr[lag] > bestVal) { bestVal = corr[lag]; bestLag = lag; }
+      break; // første tydelige top efter dip
+    }
+  }
+  if (bestLag < 0) return null;
+
+  // Parabolsk interpolation for sub-bin præcision
+  const y1 = corr[bestLag - 1], y2 = corr[bestLag], y3 = corr[bestLag + 1];
+  const offset = (y3 - y1) / (2 * (2 * y2 - y1 - y3));
+  const refinedLag = bestLag + offset;
+
+  return sampleRate / refinedLag;
+}
+
+// Konvertér Hz → MIDI-notenummer (A4=69=440Hz)
+function hzToMidi(hz, refHz) {
+  return 69 + 12 * Math.log2(hz / refHz);
+}
+
+// MIDI-notenummer → notenavn (C, C#, D, …, B)
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+function midiToName(midi) {
+  const n = Math.round(midi);
+  const octave = Math.floor(n / 12) - 1;
+  return NOTE_NAMES[((n % 12) + 12) % 12] + octave;
+}
+
+// Find overtoner: søg FFT-toppe tæt på n * grundfrekvens
+function findHarmonics(freqData, binHz, fundHz, nMax) {
+  const harmonics = [];
+  for (let n = 1; n <= nMax; n++) {
+    const targetHz = n * fundHz;
+    const centerBin = Math.round(targetHz / binHz);
+    const searchR = Math.max(3, Math.round(fundHz * 0.05 / binHz));
+    let peakBin = centerBin, peakVal = 0;
+    for (let b = centerBin - searchR; b <= centerBin + searchR; b++) {
+      if (b >= 0 && b < freqData.length && freqData[b] > peakVal) {
+        peakVal = freqData[b]; peakBin = b;
+      }
+    }
+    harmonics.push({ n, hz: peakBin * binHz, amp: peakVal });
+  }
+  return harmonics;
+}
+
+function drawMusic() {
+  const c = document.getElementById('musicCanvas');
+  if (!c) return;
+  const W = c.clientWidth;
+  const H = parseInt(c.dataset.cssHeight || c.getAttribute('height'), 10);
+  const ctx = c.getContext('2d');
+
+  // Farver fra CSS-variabler
+  const style = getComputedStyle(document.documentElement);
+  const bg     = style.getPropertyValue('--bg').trim();
+  const panel  = style.getPropertyValue('--panel').trim();
+  const text   = style.getPropertyValue('--text').trim();
+  const muted  = style.getPropertyValue('--muted').trim();
+  const blue   = style.getPropertyValue('--blue').trim();
+  const green  = style.getPropertyValue('--green').trim();
+  const brown  = style.getPropertyValue('--brown').trim();
+  const border = style.getPropertyValue('--border').trim();
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const sr = getEffectiveSampleRate();
+  if (!analyser || !sr) {
+    ctx.fillStyle = muted;
+    ctx.font = '15px Helvetica, Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Start mikrofonen for at bruge musik-fanen', W / 2, H / 2);
+    return;
+  }
+
+  // Hent tidsdomæne-data til pitch-detektion (kun når ikke paused)
+  if (!paused) {
+    const tBuf = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(tBuf);
+    const detectedHz = detectPitch(tBuf, sr);
+
+    // Glat frekvensen lidt (eksponentiel glidende gennemsnit)
+    if (detectedHz) {
+      musicSmoothedHz = musicSmoothedHz
+        ? musicSmoothedHz * 0.75 + detectedHz * 0.25
+        : detectedHz;
+    } else {
+      musicSmoothedHz = musicSmoothedHz ? musicSmoothedHz * 0.92 : null;
+      if (musicSmoothedHz && musicSmoothedHz < 60) musicSmoothedHz = null;
+    }
+  }
+
+  const showKeys   = document.getElementById('musicShowKeyboard').checked;
+  const showHarm   = document.getElementById('musicShowHarmonics').checked;
+
+  // Layout
+  const padL = 16, padR = 16;
+  const keyH = showKeys ? 80 : 0;
+  const gaugeH = 120;
+  const harmH = H - gaugeH - keyH - 48;
+  const plotW = W - padL - padR;
+
+  // ── 1. OVERTONESEKTION ─────────────────────────────────────────────
+  if (showHarm && freqData && musicSmoothedHz) {
+    const harmTop = 8;
+    const binHz = (sr / 2) / freqData.length;
+    const nMax = Math.min(16, Math.floor(maxFreq / musicSmoothedHz));
+    const harmonics = findHarmonics(freqData, binHz, musicSmoothedHz, nMax);
+    const maxAmp = Math.max(...harmonics.map(h => h.amp), 1e-10);
+
+    // Baggrundsrektangel
+    ctx.fillStyle = panel;
+    ctx.beginPath();
+    ctx.roundRect(padL, harmTop, plotW, harmH, 6);
+    ctx.fill();
+
+    // Label
+    ctx.fillStyle = muted;
+    ctx.font = `11px Helvetica, Arial, sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText('OVERTONESERIE', padL + 10, harmTop + 14);
+
+    const barW = Math.min(36, (plotW - 20) / nMax - 6);
+    const barAreaH = harmH - 36;
+    const barBottom = harmTop + harmH - 8;
+
+    harmonics.forEach((h, i) => {
+      const frac = h.amp / maxAmp;
+      const bh = Math.max(2, frac * barAreaH);
+      const x = padL + 10 + i * ((plotW - 20) / nMax) + ((plotW - 20) / nMax - barW) / 2;
+
+      // Søjle — grundtone i grønt, overtoner i blåt
+      ctx.fillStyle = i === 0 ? green + 'cc' : blue + '99';
+      ctx.beginPath();
+      ctx.roundRect(x, barBottom - bh, barW, bh, 3);
+      ctx.fill();
+
+      // Overtonenummer
+      ctx.fillStyle = i === 0 ? green : muted;
+      ctx.font = `bold ${barW > 20 ? 11 : 9}px Helvetica, Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('n=' + h.n, x + barW / 2, barBottom + 12);
+
+      // Frekvens over søjle (kun hvis plads)
+      if (frac > 0.12 && barW > 18) {
+        ctx.fillStyle = text;
+        ctx.font = `9px Helvetica, Arial, sans-serif`;
+        const hzLabel = h.hz >= 1000
+          ? (h.hz / 1000).toFixed(1) + 'k'
+          : Math.round(h.hz) + '';
+        ctx.fillText(hzLabel, x + barW / 2, barBottom - bh - 3);
+      }
+    });
+  } else if (showHarm) {
+    ctx.fillStyle = panel;
+    ctx.beginPath();
+    ctx.roundRect(padL, 8, plotW, harmH, 6);
+    ctx.fill();
+    ctx.fillStyle = muted;
+    ctx.font = '13px Helvetica, Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Ingen tone detekteret', W / 2, 8 + harmH / 2);
+  }
+
+  // ── 2. CENTS-GAUGE ─────────────────────────────────────────────────
+  const gaugeTop = (showHarm ? harmH + 16 : 8);
+  const gaugeY = gaugeTop + gaugeH / 2;
+  const gaugeX = W / 2;
+  const gaugeW = Math.min(500, plotW - 32);
+
+  // Baggrundsrektangel
+  ctx.fillStyle = panel;
+  ctx.beginPath();
+  ctx.roundRect(padL, gaugeTop, plotW, gaugeH - 8, 6);
+  ctx.fill();
+
+  if (musicSmoothedHz) {
+    const midi = hzToMidi(musicSmoothedHz, musicRefHz);
+    const nearestMidi = Math.round(midi);
+    const cents = (midi - nearestMidi) * 100;
+    const noteName = midiToName(nearestMidi);
+
+    // Tone-navn stort i midten
+    ctx.textAlign = 'center';
+    ctx.fillStyle = text;
+    ctx.font = `bold 44px Helvetica, Arial, sans-serif`;
+    ctx.fillText(noteName, gaugeX, gaugeTop + 52);
+
+    // Frekvens under tonenavnet
+    ctx.font = `13px Helvetica, Arial, sans-serif`;
+    ctx.fillStyle = muted;
+    ctx.fillText(musicSmoothedHz.toFixed(1).replace('.', ',') + ' Hz', gaugeX, gaugeTop + 70);
+
+    // Cents-linje
+    const lineY = gaugeTop + 90;
+    const lineX0 = gaugeX - gaugeW / 2;
+    const lineX1 = gaugeX + gaugeW / 2;
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(lineX0, lineY);
+    ctx.lineTo(lineX1, lineY);
+    ctx.stroke();
+
+    // Tick-mærker ved -50, -25, 0, +25, +50
+    [-50, -25, 0, 25, 50].forEach(c => {
+      const x = gaugeX + (c / 50) * gaugeW / 2;
+      ctx.strokeStyle = c === 0 ? text : border;
+      ctx.lineWidth = c === 0 ? 2 : 1;
+      ctx.beginPath();
+      ctx.moveTo(x, lineY - (c === 0 ? 10 : 5));
+      ctx.lineTo(x, lineY + (c === 0 ? 10 : 5));
+      ctx.stroke();
+      ctx.fillStyle = muted;
+      ctx.font = '9px Helvetica, Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(c > 0 ? '+' + c : c, x, lineY + 18);
+    });
+    ctx.fillText('cent', lineX1 + 22, lineY + 4);
+
+    // Nål — farve afhænger af afvigelse
+    const needleX = gaugeX + (cents / 50) * gaugeW / 2;
+    const inTune = Math.abs(cents) < 10;
+    const needleColor = inTune ? green : (Math.abs(cents) < 25 ? blue : brown);
+    ctx.strokeStyle = needleColor;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(needleX, lineY - 14);
+    ctx.lineTo(needleX, lineY + 6);
+    ctx.stroke();
+    // Trekant-top
+    ctx.fillStyle = needleColor;
+    ctx.beginPath();
+    ctx.moveTo(needleX - 5, lineY - 14);
+    ctx.lineTo(needleX + 5, lineY - 14);
+    ctx.lineTo(needleX, lineY - 22);
+    ctx.closePath();
+    ctx.fill();
+
+    // Cents-tal
+    ctx.fillStyle = needleColor;
+    ctx.font = `bold 13px Helvetica, Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    const centsStr = (cents >= 0 ? '+' : '') + cents.toFixed(1).replace('.', ',') + ' ¢';
+    ctx.fillText(centsStr, needleX, lineY - 26);
+
+  } else {
+    ctx.fillStyle = muted;
+    ctx.font = '14px Helvetica, Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Spil eller syng en tone…', gaugeX, gaugeTop + gaugeH / 2 - 4);
+  }
+
+  // ── 3. KLAVIATUR ───────────────────────────────────────────────────
+  if (showKeys) {
+    const kyTop = gaugeTop + gaugeH;
+    const kyH = keyH;
+    const nOctaves = 4;
+    const startNote = 48; // C3
+    const nWhite = nOctaves * 7;
+    const wkW = Math.floor(plotW / nWhite);
+    const bkW = Math.round(wkW * 0.6);
+    const bkH = Math.round(kyH * 0.62);
+
+    // Hvide tangenter
+    let whiteIdx = 0;
+    for (let midi = startNote; midi < startNote + nOctaves * 12; midi++) {
+      const semitone = midi % 12;
+      const isBlack = [1, 3, 6, 8, 10].includes(semitone);
+      if (isBlack) continue;
+      const x = padL + whiteIdx * wkW;
+      const isActive = musicSmoothedHz &&
+        Math.round(hzToMidi(musicSmoothedHz, musicRefHz)) === midi;
+      ctx.fillStyle = isActive ? green + '55' : bg;
+      ctx.strokeStyle = border;
+      ctx.lineWidth = 1;
+      ctx.fillRect(x, kyTop, wkW - 1, kyH - 1);
+      ctx.strokeRect(x, kyTop, wkW - 1, kyH - 1);
+      // Notenavn på C
+      if (semitone === 0) {
+        ctx.fillStyle = muted;
+        ctx.font = `${Math.min(10, wkW - 4)}px Helvetica, Arial, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('C' + (Math.floor(midi / 12) - 1), x + wkW / 2, kyTop + kyH - 5);
+      }
+      whiteIdx++;
+    }
+
+    // Sorte tangenter
+    whiteIdx = 0;
+    for (let midi = startNote; midi < startNote + nOctaves * 12; midi++) {
+      const semitone = midi % 12;
+      const isBlack = [1, 3, 6, 8, 10].includes(semitone);
+      if (!isBlack) { whiteIdx++; continue; }
+      const x = padL + (whiteIdx - 1) * wkW + wkW - bkW / 2;
+      const isActive = musicSmoothedHz &&
+        Math.round(hzToMidi(musicSmoothedHz, musicRefHz)) === midi;
+      ctx.fillStyle = isActive ? green : text;
+      ctx.fillRect(x, kyTop, bkW, bkH);
+    }
+  }
+
+  // Opdater info-linje
+  if (musicSmoothedHz) {
+    const midi = hzToMidi(musicSmoothedHz, musicRefHz);
+    const cents = (midi - Math.round(midi)) * 100;
+    const noteName = midiToName(Math.round(midi));
+    document.getElementById('musicInfo').textContent =
+      noteName + '  ·  ' +
+      musicSmoothedHz.toFixed(1).replace('.', ',') + ' Hz  ·  ' +
+      (cents >= 0 ? '+' : '') + cents.toFixed(1).replace('.', ',') + ' ¢';
+  } else {
+    document.getElementById('musicInfo').textContent = 'Ingen tone detekteret';
+  }
 }
 
 function onSweepFloorToggle() {
@@ -4090,6 +4637,145 @@ function clearTimeMarkers() {
   draw();
 }
 </script>
+
+<!-- ===== Vejlednings-popup ===== -->
+<div class="help-overlay" id="helpOverlay" onclick="onHelpOverlayClick(event)">
+  <div class="help-modal" id="helpModal">
+    <button class="help-close" onclick="closeHelp()" aria-label="Luk vejledning">✕</button>
+    <h2>Vejledning til Lydlab</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin-bottom:10px">Realtids lydanalyse med FFT, sweep, tonegeneratorer og musikfunktioner</p>
+    <div class="help-toc">
+      <a href="#hjælp-mikrofon">Mikrofon</a>
+      <a href="#hjælp-generatorer">Tonegeneratorer</a>
+      <a href="#hjælp-tidssignal">Tidssignal</a>
+      <a href="#hjælp-fft">Frekvensspektrum (FFT)</a>
+      <a href="#hjælp-sweep">Sweep-måling</a>
+      <a href="#hjælp-musik">Musik</a>
+      <a href="#hjælp-indstillinger">Lydindstillinger</a>
+      <a href="#hjælp-touch">iPad og touch</a>
+      <a href="#hjælp-gem">Gem og eksportér</a>
+    </div>
+
+    <h3 id="hjælp-mikrofon">1. Mikrofon</h3>
+    <p>Klik <b>Start mikrofon</b> øverst for at give programmet adgang til mikrofonen. Browseren beder om tilladelse første gang. Alle fire faner — Tidssignal, Frekvensspektrum, Sweep-måling og Musik — bruger det samme mikrofonsignal.</p>
+    <p>Hvis du har flere mikrofoner tilsluttet, kan du vælge den rigtige i rullemenuen <b>Input</b>. Lydlab fungerer både med indbygget mikrofon, USB-mikrofoner og lydinterfaces.</p>
+
+    <h3 id="hjælp-generatorer">2. Tonegeneratorer</h3>
+    <p>Lydlab har to uafhængige tonegeneratorer, hver med sin egen frekvens, lydstyrke og tilstand. Hver kan indstilles til:</p>
+    <ul>
+      <li><b>Fast tone</b> — en ren sinustone ved den valgte frekvens. Brug slideren eller tal-feltet.</li>
+      <li><b>Sweep, lineær</b> — frekvensen stiger jævnt fra startfrekvens til slutfrekvens over det angivne antal sekunder.</li>
+      <li><b>Sweep, logaritmisk</b> — som lineært sweep, men frekvensen fordobles i jævne tidsintervaller. Brugbart hvis man vil dække et bredt frekvensområde og lægge lige meget vægt på lave og høje frekvenser.</li>
+    </ul>
+    <div class="help-tip">💡 <b>To generatorer samtidigt:</b> Start begge med faste toner tæt på hinanden — fx 440 Hz og 444 Hz. Du hører <b>svævninger</b> (stødtoner) med 4 stød i sekundet svarende til forskelsfrekvensen |f₁ − f₂|. Med toner længere fra hinanden kan du undersøge musikalske intervaller: oktaven har forholdet 2:1, kvinten 3:2, kvarten 4:3.</div>
+    <p>Generatorerne kører uafhængigt af mikrofonen — du kan både optage med mikrofonen og spille gennem højttalerne samtidigt. Det er nøjagtigt det man udnytter ved sweep-målinger.</p>
+
+    <h3 id="hjælp-tidssignal">3. Tidssignal</h3>
+    <p>Denne fane viser mikrofonsignalet som en kurve over tid — amplituden som funktion af tid. Det er nyttigt til at bestemme <b>perioden</b> af et lydsignal direkte.</p>
+    <p><b>Markører A og B:</b> Klik i grafen for at sætte markør A; klik igen for markør B. Programmet beregner automatisk tidsforskellen Δt og frekvensen 1/Δt. For at måle perioden præcist: placer markørerne på tilsvarende punkter på kurven — fx to på hinanden følgende nulgennemgange eller toppe.</p>
+    <ul>
+      <li><b>Zoom:</b> Scroll med musehjulet eller brug <b>Shift+træk</b> for at zoome ind på et område.</li>
+      <li><b>Tidsvindue:</b> Indstil hvor mange millisekunder der vises ad gangen.</li>
+      <li><b>Højreklik</b> fjerner den nærmeste markør.</li>
+    </ul>
+    <div class="help-tip">💡 En guitarstreng stemt til kammertonen A (440 Hz) har en periode på ca. 2,3 ms. Zoom ind til et tidsvindue på 10–20 ms for at se de enkelte svingninger tydeligt og måle perioden med markørerne.</div>
+
+    <h3 id="hjælp-fft">4. Frekvensspektrum (FFT)</h3>
+    <p>FFT-fanen viser lydets <b>frekvensspektrum</b> — hvilke frekvenser der er til stede og med hvilken styrke. Y-aksen kan vises som lineær amplitude eller i decibel (dB), og X-aksen som lineær eller logaritmisk skala.</p>
+
+    <p><b>Markør:</b> Klik i grafen for at sætte en markør og aflæse frekvens og amplitude præcist.</p>
+
+    <p><b>Centroid-region:</b> Træk hen over en top for at beregne tyngdepunktet (centroid) i det valgte frekvensinterval. Det er et præcist estimat af en tops frekvens, fordi det tager hensyn til toppens form frem for kun den højeste bin.</p>
+
+    <p><b>Zoom:</b> <b>Shift+træk</b> zoomer ind på et frekvensinterval. Musehjulet zoomer om muse-punktet. Klik <b>Nulstil zoom</b> for at gå tilbage til fuld visning.</p>
+
+    <p><b>Udjævning:</b> Slideren styrer en eksponentiel glidende gennemsnit over FFT-frames. Høj udjævning giver en rolig, men "sløvet" kurve. Lav udjævning giver det øjeblikkelige spektrum uden tidsmidling. Slås automatisk fra ved sweep-måling.</p>
+
+    <p><b>Top-detektion:</b> Markér feltet og vælg antal toppe. Programmet finder automatisk de stærkeste lokale maksima og mærker dem med frekvens.</p>
+
+    <p><b>Pause:</b> Når mikrofonen kører kan du fastfryse visningen med <b>⏸ Pause</b>-knappen, så du i ro kan måle på et øjebliksbillede. Mikrofonen kører videre i baggrunden.</p>
+
+    <div class="help-tip">💡 En guitarstreng klinger ikke ved én frekvens alene. FFT viser grundtonen og dens overtoner (2×, 3×, 4× grundfrekvensen). Forholdet mellem overtonernes styrke bestemmer klangfarven — det er derfor en violin og en fløjte med samme tone lyder vidt forskelligt.</div>
+
+    <h3 id="hjælp-sweep">5. Sweep-måling</h3>
+    <p>Sweep-fanen er designet til at måle et rums eller et rørs <b>resonansfrekvenser</b>. Princippet er at køre en generator fra lav til høj frekvens mens mikrofonen lytter — frekvenser der sætter systemet i resonans giver markant større udslag i mikrofonen.</p>
+
+    <p><b>Sådan laver du en sweep-måling:</b></p>
+    <ul>
+      <li>Indstil Generator 1 til Sweep (fx 200–4000 Hz over 60 sekunder)</li>
+      <li>Klik <b>Start måling</b> i sweep-panelet</li>
+      <li>Klik <b>Start</b> på generatoren</li>
+      <li>Vær stille — undgå at tale eller røre bordet under sweepet</li>
+      <li>Målingen stopper automatisk når sweepet er færdigt</li>
+    </ul>
+
+    <div class="help-tip">💡 Et halvåbent resonansrør (åbent i den ene ende) har resonanser ved ulige multipla af grundfrekvensen: f₁, 3f₁, 5f₁, 7f₁ … Sweep-målingen viser dem alle på én gang.</div>
+
+    <p><b>Tilstand:</b> "Akkumulér maksimum" er standardindstillingen — programmet husker den højeste amplitude målt i hver enkelt frekvensbin gennem hele sweepet. "Vis aktuelt spektrum" viser i stedet det øjeblikkelige FFT-spektrum.</p>
+
+    <p><b>Markør:</b> Klik i grafen for at aflæse en frekvens og amplitude præcist.</p>
+
+    <p><b>Centroid, FWHM og Q-faktor:</b> Træk hen over en resonanstop for at beregne:</p>
+    <ul>
+      <li><b>Centroid (f_c)</b> — toppens tyngdepunkt, et præcist frekvensestimat</li>
+      <li><b>FWHM</b> — toppens bredde ved halv maksimumamplitude</li>
+      <li><b>Q-faktor</b> — Q = f_c / FWHM. En høj Q betyder en skarp, smal resonans med lille dæmpning.</li>
+    </ul>
+
+    <p><b>Træk baggrund fra:</b> Estimerer støjgulvet ud fra spektret selv og trækker det fra, så resonanstoppe træder tydeligere frem. Selve dataene ændres ikke.</p>
+
+    <p><b>Begræns til:</b> Akkumulér kun i et bestemt frekvensområde. Bruges typisk til at fjerne artefakter omkring sweepets start- og slutfrekvens.</p>
+
+    <p><b>X-akse:</b> Skift mellem lineær og logaritmisk frekvensskala. På logaritmisk skala vil toppe ved høje frekvenser se smallere ud. De ser bredere ud på lineær skala fordi dæmpningen i et rør stiger med frekvensen.</p>
+
+    <p><b>Zoom:</b> <b>Shift+træk</b> zoomer ind på et område; musehjulet zoomer om muse-punktet. Klik <b>Nulstil zoom</b> for at se hele spektret igen.</p>
+
+    <p><b>Auto-stop:</b> Stop målingen automatisk efter et antal sekunder. Brugbart hvis lyden kommer fra en ekstern kilde.</p>
+
+    <h3 id="hjælp-musik">6. Musik</h3>
+    <p>Musik-fanen er en specielfunktion til musikalske anvendelser — fx i forbindelse med projektarbejde (SRP, SSO, EP). Den kombinerer pitch-detektion, stemningsvisning og overtoneanalyse i én visning.</p>
+
+    <p><b>Overtoneserie:</b> Søjlediagrammet øverst viser grundtonen (grøn) og de første overtoner (blå). Forholdet mellem deres styrke bestemmer instrumentets klangfarve — en fløjte har få og svage overtoner, mens en violin har mange og stærke.</p>
+
+    <p><b>Tone og stemning:</b> Den store tone-skrift midt på viser den detekterede tone (fx A4, C#3), og nålen under viser stemningsafvigelsen i <b>cent</b>. En cent er 1/100 halvtone, så ±50 cent er præcis halvvejs til nabotonen. Nålen er grøn ved god stemning (±10 cent), blå ved acceptabel (±25), og rød derover.</p>
+
+    <p><b>Klaviatur:</b> Den aktive tangent lyser op. Klaviaturet dækker 4 oktaver fra C3.</p>
+
+    <p><b>Indstillinger:</b></p>
+    <ul>
+      <li><b>Reference</b> — referencefrekvensen for kammertonen A4. Standard er 440 Hz; til historisk barokmusik kan man bruge 415 Hz, og enkelte orkestre stemmer efter 442 eller 443 Hz.</li>
+      <li><b>Min. styrke</b> — under denne tærskel forsøger programmet ikke at detektere en tone. Skru ned hvis svage toner ikke bliver fanget.</li>
+      <li><b>Pause</b> — fastfryser visningen så du i ro kan studere et øjebliksbillede.</li>
+    </ul>
+
+    <div class="help-tip">💡 Pitch-detektionen bruger <b>autokorrellation</b> — en metode der er mere robust end blot at finde den højeste top i FFT-spektret. For overtonerige instrumenter (guitar, violin) ville en simpel FFT-top-finder ofte forveksle den stærkeste overtone med grundtonen. Autokorrellation finder den faktiske periodicitet i signalet.</div>
+
+    <h3 id="hjælp-indstillinger">7. Lydindstillinger (kun FFT, Sweep og Musik)</h3>
+    <p>Linjen mellem fanenavigationen og graferne indeholder fælles indstillinger der påvirker FFT-beregningen. Den er kun synlig på de relevante faner.</p>
+    <ul>
+      <li><b>Maks. frekvens</b> — hvor højt op grafen skal vise. Vælg fra dropdown (1, 2, 5, 10, 20 kHz) eller "Andet…" for en præcis værdi.</li>
+      <li><b>FFT-størrelse</b> — bestemmer frekvensopløsningen. Med 16384 er hver bin ca. 2,7 Hz bred. Lavere værdier giver hurtigere reaktion på hurtige transienter, men dårligere frekvensopløsning.</li>
+      <li><b>Højpas</b> — fjerner lavfrekvent støj (trafikrumlen, mikrofon-håndtering) inden FFT-beregningen. Skæringsfrekvensen sættes typisk til 50–200 Hz.</li>
+    </ul>
+
+    <h3 id="hjælp-touch">8. iPad og touch</h3>
+    <p>Lydlab fungerer fuldt ud på iPad og smartphone. Touch-betjeningen følger samme logik som med mus:</p>
+    <ul>
+      <li><b>Tap</b> = klik (sætter markør)</li>
+      <li><b>Træk med én finger</b> = træk hen over et frekvensområde (centroid på FFT/Sweep)</li>
+      <li><b>To fingre — pinch</b> = zoom ind eller ud om midten mellem fingrene</li>
+    </ul>
+    <p>Klik <b>Nulstil zoom</b> i kontrolpanelet for at se hele spektret igen.</p>
+
+    <h3 id="hjælp-gem">9. Gem og eksportér</h3>
+    <ul>
+      <li><b>Gem projekt</b> — gemmer hele programmets tilstand som en <code>.json</code>-fil: alle indstillinger, sweep-data og markører. Kan genindlæses med <b>Indlæs</b>.</li>
+      <li><b>Eksportér CSV</b> — eksporterer data fra den aktive fane som en kommasepareret tekstfil der kan åbnes i Excel eller Grafio. FFT-fanen eksporterer frekvens, lineær amplitude og dB. Sweep-fanen eksporterer det akkumulerede spektrum.</li>
+      <li><b>Kopiér graf</b> — kopierer den aktuelle graf som et billede til udklipsholderen, klar til at sætte ind i en rapport.</li>
+      <li><b>Mørk tilstand</b> — klik på måne-ikonet øverst til højre. Valget huskes næste gang du åbner Lydlab.</li>
+    </ul>
+  </div>
+</div>
 
 </body>
 </html>
