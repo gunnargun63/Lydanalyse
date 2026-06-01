@@ -1,7 +1,8 @@
 // Service worker til Lydlab — gør appen tilgængelig offline.
-// Bump CACHE_NAME (fx -v3, -v4...) for at tvinge alle brugere til at hente nye filer.
+// Bump CACHE_NAME hver gang du laver væsentlige ændringer
+// (fx -v4, -v5...) så elevernes browsere henter de nye filer.
 
-const CACHE_NAME = 'lydlab-v3';
+const CACHE_NAME = 'lydlab-v4';
 const ASSETS = [
   'index.html',
   'manifest.json',
