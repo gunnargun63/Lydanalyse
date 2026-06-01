@@ -2,7 +2,7 @@
   "name": "Lydlab",
   "short_name": "Lydlab",
   "description": "Realtids lydanalyse med FFT, sweep-måling, tonegeneratorer og musikfunktioner",
-  "start_url": "./lydlab.html",
+  "start_url": "index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
