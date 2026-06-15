@@ -4,12 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Lydlab — lydanalyse og spektrum</title>
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#378ADD">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Lydlab">
-<link rel="apple-touch-icon" href="icon.svg">
-<link rel="icon" type="image/svg+xml" href="icon.svg">
 
 <script>
   (function() {
@@ -510,14 +504,6 @@ canvas {
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px">
         <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
       </svg>Vejledning</button>
-    <button id="installBtn" onclick="installPwa()" style="display:none" title="Installer Lydlab som app på din enhed">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-      </svg>Installer app</button>
-    <button onclick="downloadApp()" title="Download Lydlab som enkeltstående HTML-fil til offline brug">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-      </svg>Download app</button>
     <button onclick="copyGraph()" title="Kopiér den aktuelle graf til udklipsholderen">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
@@ -1036,6 +1022,7 @@ let fftAxisType = 'lin';       // 'lin' eller 'log'
 let fftZoomMin = null;          // Hz, null = brug 0
 let fftZoomMax = null;          // Hz, null = brug maxFreq
 let fftDragStart = null;        // Hz, for shift+træk-zoom
+let fftSuppressNextClick = false; // Sættes når et træk netop sluttede, så den efterfølgende click-event ikke flytter markøren
 let fftCentroidA = null;        // Hz, centroid-region start
 let fftCentroidB = null;        // Hz, centroid-region slut
 let fftNormalDragStart = null;  // Hz, normalt (ikke-shift) træk
@@ -1108,86 +1095,6 @@ function resizeOneCanvas(id) {
 }
 
 // ===== Tema =====
-// ===== PWA: Service Worker og offline =====
-// Registrér service worker og lyt efter opdateringer
-let pwaWasControlled = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./service-worker.js').catch(() => {
-      // Stille — kører appen som almindelig webside hvis SW ikke kan registreres
-    });
-  });
-
-  // Når en ny service worker tager over (controllerchange), er det enten:
-  // - første installation (wasControlled = false) → ingen banner
-  // - en opdatering (wasControlled = true) → vis "Ny version tilgængelig"
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (pwaWasControlled) showUpdateBanner();
-    pwaWasControlled = true;
-  });
-}
-
-function showUpdateBanner() {
-  if (document.getElementById('updateBanner')) return; // allerede vist
-  const banner = document.createElement('div');
-  banner.id = 'updateBanner';
-  banner.style.cssText =
-    'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);' +
-    'background:var(--blue);color:#fff;padding:12px 18px;border-radius:8px;' +
-    'box-shadow:0 6px 20px rgba(0,0,0,0.25);z-index:9999;display:flex;gap:12px;' +
-    'align-items:center;font-size:0.9rem;font-family:Helvetica,Arial,sans-serif;' +
-    'max-width:90vw;flex-wrap:wrap;justify-content:center';
-  banner.innerHTML =
-    '<span>✨ Ny version af Lydlab er tilgængelig</span>' +
-    '<button id="updateReloadBtn" style="background:#fff;color:#2779cc;border:none;border-radius:5px;padding:7px 14px;font-weight:600;cursor:pointer;font-size:0.9rem">Genindlæs</button>' +
-    '<button id="updateDismissBtn" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.6);border-radius:5px;padding:7px 14px;cursor:pointer;font-size:0.9rem">Senere</button>';
-  document.body.appendChild(banner);
-  document.getElementById('updateReloadBtn').onclick = () => window.location.reload();
-  document.getElementById('updateDismissBtn').onclick = () => banner.remove();
-}
-
-// Lyt efter PWA install-prompt event
-let pwaInstallEvent = null;
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  pwaInstallEvent = e;
-  document.getElementById('installBtn').style.display = '';
-});
-
-window.addEventListener('appinstalled', () => {
-  document.getElementById('installBtn').style.display = 'none';
-  pwaInstallEvent = null;
-});
-
-function installPwa() {
-  if (!pwaInstallEvent) {
-    alert('Appen er enten allerede installeret, eller din browser understøtter ikke installation. På iPad/iPhone: tryk Del-knappen i Safari og vælg "Føj til hjemmeskærm".');
-    return;
-  }
-  pwaInstallEvent.prompt();
-  pwaInstallEvent.userChoice.finally(() => {
-    pwaInstallEvent = null;
-    document.getElementById('installBtn').style.display = 'none';
-  });
-}
-
-// Download den aktuelle HTML-fil til lokal brug
-async function downloadApp() {
-  try {
-    const res = await fetch(window.location.href);
-    if (!res.ok) throw new Error('Kunne ikke hente filen');
-    const text = await res.text();
-    const blob = new Blob([text], { type: 'text/html' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'lydlab.html';
-    a.click();
-  } catch (e) {
-    alert('Kunne ikke downloade automatisk. Højreklik på siden og vælg "Gem som…" for at gemme den lokalt.');
-  }
-}
-
 function openHelp() {
   document.getElementById('helpOverlay').classList.add('open');
   document.getElementById('helpModal').scrollTop = 0;
@@ -3739,11 +3646,8 @@ function drawMarkerOnFft(ctx, padL, padT, plotW, plotH, brown, muted, text,
     const bin = Math.round(markerHz / binHz);
     let info = markerHz.toFixed(1).replace('.', ',') + ' Hz';
     if (data && bin >= 0 && bin < data.length) {
-      const v = data[bin];
       if (fftScale === 'db' && data === freqData) {
         info += '  •  ' + freqDataDb[bin].toFixed(1).replace('.', ',') + ' dB';
-      } else {
-        info += '  •  ' + v.toFixed(4).replace('.', ',');
       }
     }
     drawLine(markerHz, true, brown, info);
@@ -3812,6 +3716,7 @@ function canvasToHz(canvasId, event) {
 }
 
 function onFftClick(e) {
+  if (fftSuppressNextClick) { fftSuppressNextClick = false; return; }
   if (e.shiftKey || fftDragStart != null || fftNormalDragActive) return;
   const hz = canvasToHzFft(e);
   if (hz != null) {
@@ -3874,6 +3779,7 @@ function onFftUp(e) {
       fftCentroidA = Math.min(fftNormalDragStart, hz);
       fftCentroidB = Math.max(fftNormalDragStart, hz);
       document.getElementById('fftCentroidClearBtn').style.display = '';
+      fftSuppressNextClick = true; // undgå at den efterfølgende click-event flytter markøren
     }
     fftNormalDragStart = null; fftNormalDragCur = null; fftNormalDragActive = false;
     draw();
@@ -3990,11 +3896,9 @@ function updateFftInfo() {
     info.textContent = '—';
     return;
   }
-  const ampL = freqData[bin];
   const ampD = freqDataDb[bin];
   const prefix = fftHoverHz != null && fftHoverHz !== fftMarkerHz ? 'Hover: ' : 'Markør: ';
   info.textContent = prefix + hz.toFixed(1).replace('.', ',') + ' Hz' +
-    '  ·  ' + ampL.toFixed(4).replace('.', ',') +
     '  ·  ' + ampD.toFixed(1).replace('.', ',') + ' dB';
 }
 
@@ -4557,8 +4461,8 @@ function updateSweepInfo() {
     return;
   }
   const prefix = sweepHoverHz != null && sweepHoverHz !== sweepMarkerHz ? 'Hover: ' : 'Markør: ';
-  // Hvis y-aksen er dB, vis også dB-værdi relativt til global maks i visningen
-  let extra = 'amplitude ' + data[bin].toFixed(4).replace('.', ',');
+  // Hvis y-aksen er dB, vis dB-værdi relativt til global maks i visningen
+  let extra = '';
   if (sweepYScale === 'db') {
     const drawData = getSweepDrawData(data, binHz);
     // Find global maks (samme som drawSweep)
@@ -4567,10 +4471,10 @@ function updateSweepInfo() {
     for (let i = 0; i < maxBin; i++) if (drawData[i] > amax) amax = drawData[i];
     if (amax > 0 && drawData[bin] > 0) {
       const db = 20 * Math.log10(drawData[bin] / amax);
-      extra += '  ·  ' + db.toFixed(1).replace('.', ',') + ' dB';
+      extra = '  ·  ' + db.toFixed(1).replace('.', ',') + ' dB';
     }
   }
-  info.textContent = prefix + hz.toFixed(1).replace('.', ',') + ' Hz  ·  ' + extra;
+  info.textContent = prefix + hz.toFixed(1).replace('.', ',') + ' Hz' + extra;
 }
 
 // Returnerer det amplitude-array der ligger på skærmen lige nu (med evt. floor-subtraktion).
@@ -4748,7 +4652,6 @@ function clearTimeMarkers() {
       <a href="#hjælp-indstillinger">Lydindstillinger</a>
       <a href="#hjælp-touch">iPad og touch</a>
       <a href="#hjælp-gem">Gem og eksportér</a>
-      <a href="#hjælp-offline">Offline-brug</a>
     </div>
 
     <h3 id="hjælp-mikrofon">1. Mikrofon</h3>
@@ -4869,14 +4772,6 @@ function clearTimeMarkers() {
       <li><b>Kopiér graf</b> — kopierer den aktuelle graf som et billede til udklipsholderen, klar til at sætte ind i en rapport.</li>
       <li><b>Mørk tilstand</b> — klik på måne-ikonet øverst til højre. Valget huskes næste gang du åbner Lydlab.</li>
     </ul>
-
-    <h3 id="hjælp-offline">10. Offline-brug</h3>
-    <p>Lydlab kan bruges uden internet på to måder:</p>
-    <ul>
-      <li><b>Installer som app</b> — klik <b>Installer app</b> i toppen (knappen vises kun når browseren understøtter det). Appen lægges på enheden og kan åbnes som en almindelig app fra hjemmeskærmen eller programmenuen, også uden internet. Opdateringer hentes automatisk når der er forbindelse.</li>
-      <li><b>Download som fil</b> — klik <b>Download app</b> i toppen for at gemme <code>lydlab.html</code> til disken. Dobbeltklik på filen for at åbne den i browseren. Virker offline uden videre.</li>
-    </ul>
-    <div class="help-tip">💡 På iPad/iPhone (Safari): tryk på Del-knappen og vælg "Føj til hjemmeskærm" for at installere appen som ikon.</div>
   </div>
 </div>
 
